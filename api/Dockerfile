@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /app
 COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY api/app.py .
+COPY api/app.py api/workspace_manager.py ./
 COPY tasks /app/tasks
 
 EXPOSE 5000

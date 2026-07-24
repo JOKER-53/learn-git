@@ -57,7 +57,7 @@
 <div id="denied">You need an admin account to view this page. <a href="login.html" style="color:#2ea043;">Sign in</a></div>
 
 <script>
-const API = "http://localhost:5000";
+const API = "";
 
 async function init() {
   const meRes = await fetch(`${API}/api/auth/me`, { credentials: "include" });

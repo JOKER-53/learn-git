@@ -14,16 +14,21 @@ Instead:
 
 ## Known Security Considerations (read before deploying publicly)
 
-This project currently has a **shared single workspace container** for all students — meaning every logged-in user's terminal points at the *same* `/workspace-data/repo` on disk. This is fine for a single-user demo or classroom with one student at a time, but is **not safe for multi-tenant public deployment** yet: students would be able to see and overwrite each other's work, and task validation would be ambiguous across concurrent users.
+**Per-student workspace isolation (current state):** each student now gets their own dedicated container (`workspace-<reg_no>`), created on login/registration and reused afterward. Students cannot see or overwrite each other's repos — each writes only to `/data/<reg_no>/repo` on a shared volume, and `nginx` routes `/terminal/<reg_no>/` to that specific container by name. This closes the "shared workspace" gap from earlier versions of this project.
 
-Before deploying to a shared/public server or AWS with multiple simultaneous students, you should:
-- Give each student their own isolated workspace container (or namespaced directory) and update `WORKSPACE_REPO_PATH` resolution in `api/app.py` to be per-user.
+**New tradeoff this introduces: the Docker socket.** To launch per-student containers on demand, the `api` service needs to talk to the Docker daemon, so `docker-compose.yml` mounts `/var/run/docker.sock` into it. This is a significant privilege: **anything that can execute arbitrary code inside the `api` container can control the entire Docker host** (start/stop containers, mount host paths, effectively gain root on the server). Mitigations in place and recommended:
+- `api`'s only user input that reaches Docker is `reg_no`, which is strictly validated to `[A-Za-z0-9_-]+` before being used in a container/volume name (`workspace_manager.is_safe_reg_no`) — never pass unsanitized user input anywhere near the Docker API.
+- Per-student containers are started with CPU/memory limits (`mem_limit`, `nano_cpus` in `workspace_manager.py`) so one student can't exhaust the host.
+- Keep the `api` image's dependencies minimal and patched — a code-execution bug in `api` is now equivalent to a host compromise.
+- For a hardened production setup, consider replacing the direct socket mount with a scoped Docker API proxy (e.g. Tecnativa's docker-socket-proxy) that only allows the specific container/volume operations `workspace_manager.py` needs, rather than full daemon access.
+
+Other items before deploying to AWS/a public server:
 - Set a strong, random `SECRET_KEY` via `.env` (never use the default dev key in production).
-- Set `COOKIE_SECURE=true` and serve everything over HTTPS.
+- Set `COOKIE_SECURE=true` and serve everything over HTTPS (see DEPLOYMENT.md).
 - Restrict `CORS_ORIGIN` to your actual frontend domain instead of `*`.
-- Put the `workspace` terminal (ttyd) behind authentication at the proxy level too — right now anyone with the URL can reach the raw terminal directly on port 7681, bypassing the app's login if that port is publicly exposed.
-- Rate-limit `/api/auth/login` and `/api/auth/register` to reduce brute-force risk.
-- Review resource limits (CPU/memory) on the workspace container so one student can't exhaust the host.
+- Only `nginx`'s port 80/443 should be publicly reachable — `api`, `webapp`, and student `workspace-*` containers have no published ports and are only reachable through the proxy. Don't add `ports:` to those services when deploying.
+- Rate-limit `/api/auth/login` and `/api/auth/register` to reduce brute-force risk (not yet implemented — add at the nginx layer with `limit_req` or in Flask).
+- Student containers currently don't auto-expire — long-running idle containers accumulate. Consider a cleanup job that stops workspaces inactive for N days.
 
 ## Password Storage
 

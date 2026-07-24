@@ -196,14 +196,14 @@
   <div id="terminal-panel">
     <div class="term-header">
       <span>your terminal</span>
-      <a href="http://localhost:7681" target="_blank">open full screen ↗</a>
+      <a id="terminal-fullscreen-link" href="#" target="_blank">open full screen ↗</a>
     </div>
-    <iframe src="http://localhost:7681" title="workspace terminal"></iframe>
+    <iframe id="terminal-iframe" src="about:blank" title="workspace terminal"></iframe>
   </div>
 </div>
 
 <script>
-const API = "http://localhost:5000";
+const API = "";
 const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
 
 async function requireAuth() {
@@ -220,6 +220,10 @@ async function requireAuth() {
       await fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" });
       window.location.href = "login.html";
     });
+  }
+  if (me.terminal_path) {
+    document.getElementById("terminal-iframe").src = me.terminal_path;
+    document.getElementById("terminal-fullscreen-link").href = me.terminal_path;
   }
   return me;
 }

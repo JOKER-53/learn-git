@@ -62,5 +62,7 @@ if [ ! -f "$FLAG" ]; then
   touch "$FLAG"
 fi
 
-cd /workspace-data/repo || cd /workspace-data
+STUDENT_REPO="/data/${REG_NO:-anon}/repo"
+mkdir -p "$STUDENT_REPO"
+cd "$STUDENT_REPO" || cd /data
 exec bash

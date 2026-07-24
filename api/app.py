@@ -4,10 +4,12 @@ learn-git API
 - Serves task list, validates task completion against the student's repo
 - Stores progress + accounts in SQLite (persisted via docker volume)
 - Admin endpoints for viewing all students' progress
+- Spins up an isolated workspace container per student (see workspace_manager.py)
+  so concurrent students never share a terminal or a repo.
 """
 import json
+import logging
 import os
-import secrets
 import sqlite3
 import subprocess
 from datetime import datetime
@@ -18,7 +20,10 @@ from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 
+import workspace_manager
+
 app = Flask(__name__)
+log = logging.getLogger("learn-git")
 
 # SECRET_KEY must be set to a real random value in production (env var).
 # Falls back to a dev-only key so local `docker compose up` still works.
@@ -31,8 +36,9 @@ app.config.update(
 CORS(app, supports_credentials=True, origins=os.environ.get("CORS_ORIGIN", "*"))
 
 TASKS_PATH = Path(os.environ.get("TASKS_PATH", "/app/tasks/tasks.json"))
-WORKSPACE_REPO = os.environ.get("WORKSPACE_REPO_PATH", "/workspace-data/repo")
-DB_PATH = os.environ.get("DB_PATH", "/data/progress.db")
+# NOTE: DB_PATH deliberately lives outside /data -- /data is the shared
+# students-workspace volume mount, and DB_PATH must not collide with it.
+DB_PATH = os.environ.get("DB_PATH", "/dbdata/progress.db")
 
 # First reg_no(s) that register are auto-promoted to admin (comma-separated env var).
 # e.g. ADMIN_REG_NOS="21CS001,21CS002"
@@ -67,16 +73,25 @@ def get_db():
     return conn
 
 
-def run_git(*args):
-    """Run a git command inside the student's repo, return (ok, stdout)."""
+def run_git(reg_no, *args):
+    """Run a git command inside THIS student's repo, return (ok, stdout)."""
+    repo_path = workspace_manager.workspace_repo_path(reg_no)
     try:
         result = subprocess.run(
-            ["git", "-C", WORKSPACE_REPO, *args],
+            ["git", "-C", repo_path, *args],
             capture_output=True, text=True, timeout=10
         )
         return result.returncode == 0, result.stdout.strip()
     except Exception as e:
         return False, str(e)
+
+
+def start_workspace_safely(reg_no):
+    """Best-effort: don't block login/register if Docker orchestration hiccups."""
+    try:
+        workspace_manager.ensure_workspace(reg_no)
+    except Exception as e:
+        log.error("Failed to start workspace for %s: %s", reg_no, e)
 
 
 # ---- Auth helpers ----
@@ -102,43 +117,45 @@ def admin_required(f):
 
 
 # ---- Validators ----
+# All validators take (reg_no, args) so each check runs against the
+# correct student's isolated workspace.
 
-def check_repo_exists(_args):
-    return os.path.isdir(os.path.join(WORKSPACE_REPO, ".git"))
+def check_repo_exists(reg_no, _args):
+    return os.path.isdir(os.path.join(workspace_manager.workspace_repo_path(reg_no), ".git"))
 
 
-def check_has_commit(_args):
-    ok, out = run_git("log", "--oneline")
+def check_has_commit(reg_no, _args):
+    ok, out = run_git(reg_no, "log", "--oneline")
     return ok and len(out) > 0
 
 
-def check_branch_exists(args):
-    ok, out = run_git("branch", "--list", args["branch"])
+def check_branch_exists(reg_no, args):
+    ok, out = run_git(reg_no, "branch", "--list", args["branch"])
     return ok and args["branch"] in out
 
 
-def check_current_branch_is(args):
-    ok, out = run_git("rev-parse", "--abbrev-ref", "HEAD")
+def check_current_branch_is(reg_no, args):
+    ok, out = run_git(reg_no, "rev-parse", "--abbrev-ref", "HEAD")
     return ok and out == args["branch"]
 
 
-def check_branch_merged_into(args):
-    ok, out = run_git("branch", "--merged", args["into"])
+def check_branch_merged_into(reg_no, args):
+    ok, out = run_git(reg_no, "branch", "--merged", args["into"])
     branches = [b.strip().lstrip("* ").strip() for b in out.splitlines()]
     return ok and args["branch"] in branches
 
 
-def check_stash_not_empty(_args):
-    ok, out = run_git("stash", "list")
+def check_stash_not_empty(reg_no, _args):
+    ok, out = run_git(reg_no, "stash", "list")
     return ok and len(out) > 0
 
 
-def check_has_remote(args):
-    ok, out = run_git("remote")
+def check_has_remote(reg_no, args):
+    ok, out = run_git(reg_no, "remote")
     return ok and args["remote"] in out.splitlines()
 
 
-def check_manual_review(_args):
+def check_manual_review(reg_no, _args):
     return False
 
 
@@ -166,6 +183,8 @@ def register():
         return jsonify({"error": "reg_no and password are required"}), 400
     if len(password) < 6:
         return jsonify({"error": "password must be at least 6 characters"}), 400
+    if not workspace_manager.is_safe_reg_no(reg_no):
+        return jsonify({"error": "reg_no may only contain letters, numbers, - and _"}), 400
 
     conn = get_db()
     existing = conn.execute("SELECT reg_no FROM users WHERE reg_no = ?", (reg_no,)).fetchone()
@@ -183,7 +202,11 @@ def register():
 
     session["reg_no"] = reg_no
     session["is_admin"] = bool(is_admin)
-    return jsonify({"ok": True, "reg_no": reg_no, "is_admin": bool(is_admin)})
+    start_workspace_safely(reg_no)
+    return jsonify({
+        "ok": True, "reg_no": reg_no, "is_admin": bool(is_admin),
+        "terminal_path": f"/terminal/{reg_no}/",
+    })
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -203,7 +226,11 @@ def login():
 
     session["reg_no"] = reg_no
     session["is_admin"] = bool(row[1])
-    return jsonify({"ok": True, "reg_no": reg_no, "is_admin": bool(row[1])})
+    start_workspace_safely(reg_no)
+    return jsonify({
+        "ok": True, "reg_no": reg_no, "is_admin": bool(row[1]),
+        "terminal_path": f"/terminal/{reg_no}/",
+    })
 
 
 @app.route("/api/auth/logout", methods=["POST"])
@@ -220,6 +247,7 @@ def me():
         "authenticated": True,
         "reg_no": session["reg_no"],
         "is_admin": bool(session.get("is_admin")),
+        "terminal_path": f"/terminal/{session['reg_no']}/",
     })
 
 
@@ -257,7 +285,7 @@ def check_task(task_id):
     if not validator:
         return jsonify({"error": "no validator"}), 500
 
-    passed = validator(task.get("check_args", {}))
+    passed = validator(user_id, task.get("check_args", {}))
 
     if passed:
         conn = get_db()
