@@ -185,6 +185,7 @@
     <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
     <span class="progress-label" id="progress-label">0 / 0</span>
   </div>
+  <div id="who" style="font-size:13px;color:var(--muted);margin-left:16px;white-space:nowrap;"></div>
 </header>
 
 <div class="layout">
@@ -203,12 +204,29 @@
 
 <script>
 const API = "http://localhost:5000";
-const USER_ID = "demo-user"; // replace with real auth later
-
 const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
 
+async function requireAuth() {
+  const res = await fetch(`${API}/api/auth/me`, { credentials: "include" });
+  if (!res.ok) {
+    window.location.href = "login.html";
+    return null;
+  }
+  const me = await res.json();
+  const whoEl = document.getElementById("who");
+  if (whoEl) {
+    whoEl.innerHTML = `${me.reg_no} <a id="logout" style="color:#f85149;cursor:pointer;text-decoration:none;margin-left:10px;">Sign out</a>`;
+    document.getElementById("logout").addEventListener("click", async () => {
+      await fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" });
+      window.location.href = "login.html";
+    });
+  }
+  return me;
+}
+
 async function loadTasks() {
-  const res = await fetch(`${API}/api/tasks?user_id=${USER_ID}`);
+  const res = await fetch(`${API}/api/tasks`, { credentials: "include" });
+  if (res.status === 401) { window.location.href = "login.html"; return; }
   const tasks = await res.json();
   const container = document.getElementById("tasks");
   container.innerHTML = "";
@@ -257,7 +275,7 @@ async function loadTasks() {
       const res = await fetch(`${API}/api/tasks/${btn.dataset.id}/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: USER_ID })
+        credentials: "include"
       });
       const data = await res.json();
       if (data.passed) {
@@ -271,11 +289,10 @@ async function loadTasks() {
   });
 }
 
-function formatDesc(text) {
-  return text.replace(/`([^`]+)`/g, "<code>$1</code>");
-}
-
-loadTasks();
+(async () => {
+  const me = await requireAuth();
+  if (me) loadTasks();
+})();
 </script>
 </body>
 </html>

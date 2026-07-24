@@ -1,24 +1,44 @@
 """
 learn-git API
-- Serves task list
-- Validates task completion by inspecting the student's repo (mounted volume)
-- Stores progress in SQLite (persisted via docker volume)
+- Auth: register/login students by registration number (REG NO) + password
+- Serves task list, validates task completion against the student's repo
+- Stores progress + accounts in SQLite (persisted via docker volume)
+- Admin endpoints for viewing all students' progress
 """
 import json
 import os
+import secrets
 import sqlite3
 import subprocess
+from datetime import datetime
+from functools import wraps
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-CORS(app)
+
+# SECRET_KEY must be set to a real random value in production (env var).
+# Falls back to a dev-only key so local `docker compose up` still works.
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-insecure-key-change-me")
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+)
+
+CORS(app, supports_credentials=True, origins=os.environ.get("CORS_ORIGIN", "*"))
 
 TASKS_PATH = Path(os.environ.get("TASKS_PATH", "/app/tasks/tasks.json"))
 WORKSPACE_REPO = os.environ.get("WORKSPACE_REPO_PATH", "/workspace-data/repo")
 DB_PATH = os.environ.get("DB_PATH", "/data/progress.db")
+
+# First reg_no(s) that register are auto-promoted to admin (comma-separated env var).
+# e.g. ADMIN_REG_NOS="21CS001,21CS002"
+ADMIN_REG_NOS = set(
+    r.strip() for r in os.environ.get("ADMIN_REG_NOS", "").split(",") if r.strip()
+)
 
 with open(TASKS_PATH) as f:
     TASKS = {t["id"]: t for t in json.load(f)}
@@ -27,6 +47,14 @@ with open(TASKS_PATH) as f:
 def get_db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            reg_no TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS progress (
             user_id TEXT NOT NULL,
@@ -49,6 +77,28 @@ def run_git(*args):
         return result.returncode == 0, result.stdout.strip()
     except Exception as e:
         return False, str(e)
+
+
+# ---- Auth helpers ----
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if "reg_no" not in session:
+            return jsonify({"error": "not authenticated"}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if "reg_no" not in session:
+            return jsonify({"error": "not authenticated"}), 401
+        if not session.get("is_admin"):
+            return jsonify({"error": "admin only"}), 403
+        return f(*args, **kwargs)
+    return wrapper
 
 
 # ---- Validators ----
@@ -89,8 +139,6 @@ def check_has_remote(args):
 
 
 def check_manual_review(_args):
-    # Placeholder for tasks needing richer inspection (e.g. reflog diffing).
-    # For now these are marked complete via explicit "submit" endpoint.
     return False
 
 
@@ -106,11 +154,81 @@ VALIDATORS = {
 }
 
 
-# ---- Routes ----
+# ---- Auth routes ----
+
+@app.route("/api/auth/register", methods=["POST"])
+def register():
+    data = request.get_json(silent=True) or {}
+    reg_no = (data.get("reg_no") or "").strip()
+    password = data.get("password") or ""
+
+    if not reg_no or not password:
+        return jsonify({"error": "reg_no and password are required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+
+    conn = get_db()
+    existing = conn.execute("SELECT reg_no FROM users WHERE reg_no = ?", (reg_no,)).fetchone()
+    if existing:
+        conn.close()
+        return jsonify({"error": "account already exists"}), 409
+
+    is_admin = 1 if reg_no in ADMIN_REG_NOS else 0
+    conn.execute(
+        "INSERT INTO users (reg_no, password_hash, is_admin) VALUES (?, ?, ?)",
+        (reg_no, generate_password_hash(password), is_admin)
+    )
+    conn.commit()
+    conn.close()
+
+    session["reg_no"] = reg_no
+    session["is_admin"] = bool(is_admin)
+    return jsonify({"ok": True, "reg_no": reg_no, "is_admin": bool(is_admin)})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+    data = request.get_json(silent=True) or {}
+    reg_no = (data.get("reg_no") or "").strip()
+    password = data.get("password") or ""
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT password_hash, is_admin FROM users WHERE reg_no = ?", (reg_no,)
+    ).fetchone()
+    conn.close()
+
+    if not row or not check_password_hash(row[0], password):
+        return jsonify({"error": "invalid registration number or password"}), 401
+
+    session["reg_no"] = reg_no
+    session["is_admin"] = bool(row[1])
+    return jsonify({"ok": True, "reg_no": reg_no, "is_admin": bool(row[1])})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/me")
+def me():
+    if "reg_no" not in session:
+        return jsonify({"authenticated": False}), 401
+    return jsonify({
+        "authenticated": True,
+        "reg_no": session["reg_no"],
+        "is_admin": bool(session.get("is_admin")),
+    })
+
+
+# ---- Task routes (require login) ----
 
 @app.route("/api/tasks")
+@login_required
 def list_tasks():
-    user_id = request.args.get("user_id", "anon")
+    user_id = session["reg_no"]
     conn = get_db()
     done = {row[0] for row in conn.execute(
         "SELECT task_id FROM progress WHERE user_id = ?", (user_id,)
@@ -128,8 +246,9 @@ def list_tasks():
 
 
 @app.route("/api/tasks/<task_id>/check", methods=["POST"])
+@login_required
 def check_task(task_id):
-    user_id = request.json.get("user_id", "anon") if request.is_json else "anon"
+    user_id = session["reg_no"]
     task = TASKS.get(task_id)
     if not task:
         return jsonify({"error": "unknown task"}), 404
@@ -152,9 +271,40 @@ def check_task(task_id):
     return jsonify({"task_id": task_id, "passed": passed})
 
 
+# ---- Admin routes ----
+
+@app.route("/api/admin/students")
+@admin_required
+def admin_students():
+    conn = get_db()
+    users = conn.execute(
+        "SELECT reg_no, is_admin, created_at FROM users ORDER BY created_at"
+    ).fetchall()
+
+    total_tasks = len(TASKS)
+    out = []
+    for reg_no, is_admin, created_at in users:
+        done = conn.execute(
+            "SELECT task_id, completed_at FROM progress WHERE user_id = ? ORDER BY completed_at",
+            (reg_no,)
+        ).fetchall()
+        last_activity = done[-1][1] if done else None
+        out.append({
+            "reg_no": reg_no,
+            "is_admin": bool(is_admin),
+            "created_at": created_at,
+            "completed_count": len(done),
+            "total_tasks": total_tasks,
+            "last_activity": last_activity,
+            "completed_tasks": [d[0] for d in done],
+        })
+    conn.close()
+    return jsonify(out)
+
+
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "time": datetime.utcnow().isoformat()})
 
 
 if __name__ == "__main__":
