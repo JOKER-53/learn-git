@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>learn-git — admin</title>
+<style>
+  :root { --bg:#0d1117; --panel:#11161d; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --green:#2ea043; --red:#f85149; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+  header {
+    padding: 18px 32px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  h1 span { color: var(--green); }
+  .who { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 14px; }
+  .who a { color: var(--red); text-decoration: none; cursor: pointer; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 32px 64px; }
+  .stats { display: flex; gap: 16px; margin-bottom: 24px; }
+  .stat {
+    flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .stat .num { font-size: 24px; font-weight: 700; }
+  .stat .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 16px; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+  tr:last-child td { border-bottom: none; }
+  .bar-track { width: 120px; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+  .bar-fill { height: 100%; background: var(--green); }
+  .admin-tag { font-size: 11px; color: var(--green); font-weight: 600; margin-left: 6px; }
+  #denied { padding: 60px 32px; text-align: center; color: var(--muted); display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>learn<span>-git</span> — admin</h1>
+  <div class="who" id="who"></div>
+</header>
+
+<main id="main">
+  <div class="stats" id="stats"></div>
+  <table>
+    <thead>
+      <tr>
+        <th>Registration No.</th>
+        <th>Progress</th>
+        <th>Last activity</th>
+        <th>Joined</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+
+<div id="denied">You need an admin account to view this page. <a href="login.html" style="color:#2ea043;">Sign in</a></div>
+
+<script>
+const API = "http://localhost:5000";
+
+async function init() {
+  const meRes = await fetch(`${API}/api/auth/me`, { credentials: "include" });
+  if (!meRes.ok) { window.location.href = "login.html"; return; }
+  const me = await meRes.json();
+  if (!me.is_admin) {
+    document.getElementById("main").style.display = "none";
+    document.getElementById("denied").style.display = "block";
+    return;
+  }
+
+  document.getElementById("who").innerHTML =
+    `${me.reg_no} <span class="admin-tag">ADMIN</span> <a id="logout">Sign out</a>`;
+  document.getElementById("logout").addEventListener("click", async () => {
+    await fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" });
+    window.location.href = "login.html";
+  });
+
+  const res = await fetch(`${API}/api/admin/students`, { credentials: "include" });
+  if (!res.ok) return;
+  const students = await res.json();
+
+  const totalStudents = students.length;
+  const avgProgress = totalStudents
+    ? Math.round(students.reduce((sum, s) => sum + s.completed_count / s.total_tasks, 0) / totalStudents * 100)
+    : 0;
+  const fullyDone = students.filter(s => s.total_tasks > 0 && s.completed_count === s.total_tasks).length;
+
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="num">${totalStudents}</div><div class="label">Students</div></div>
+    <div class="stat"><div class="num">${avgProgress}%</div><div class="label">Avg. progress</div></div>
+    <div class="stat"><div class="num">${fullyDone}</div><div class="label">Completed all tasks</div></div>
+  `;
+
+  const rows = document.getElementById("rows");
+  rows.innerHTML = students.map(s => {
+    const pct = s.total_tasks ? Math.round((s.completed_count / s.total_tasks) * 100) : 0;
+    return `
+      <tr>
+        <td>${s.reg_no}${s.is_admin ? '<span class="admin-tag">ADMIN</span>' : ""}</td>
+        <td>
+          <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
+          ${s.completed_count} / ${s.total_tasks}
+        </td>
+        <td>${s.last_activity ? new Date(s.last_activity + "Z").toLocaleString() : "—"}</td>
+        <td>${new Date(s.created_at + "Z").toLocaleDateString()}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+init();
+</script>
+</body>
+</html>
