@@ -1,0 +1,105 @@
+[
+  {
+    "id": "init-repo",
+    "tier": "beginner",
+    "order": 1,
+    "title": "Initialize a repository",
+    "description": "Run `git init` inside your workspace to create a new Git repository.",
+    "check": "repo_exists",
+    "prereq": null
+  },
+  {
+    "id": "first-commit",
+    "tier": "beginner",
+    "order": 2,
+    "title": "Make your first commit",
+    "description": "Create any file, `git add` it, and commit it with any message.",
+    "check": "has_commit",
+    "prereq": "init-repo"
+  },
+  {
+    "id": "check-status",
+    "tier": "beginner",
+    "order": 3,
+    "title": "Check repository status",
+    "description": "Modify a tracked file and run `git status` to see it listed as changed. (We just check that a commit history exists and working tree has been touched.)",
+    "check": "has_commit",
+    "prereq": "first-commit"
+  },
+  {
+    "id": "create-branch-dev",
+    "tier": "intermediate",
+    "order": 4,
+    "title": "Create a new branch named 'dev'",
+    "description": "Run `git branch dev` or `git checkout -b dev` to create a branch called 'dev'.",
+    "check": "branch_exists",
+    "check_args": { "branch": "dev" },
+    "prereq": "first-commit"
+  },
+  {
+    "id": "switch-branch-dev",
+    "tier": "intermediate",
+    "order": 5,
+    "title": "Switch to the 'dev' branch",
+    "description": "Run `git checkout dev` (or `git switch dev`) so HEAD points at 'dev'.",
+    "check": "current_branch_is",
+    "check_args": { "branch": "dev" },
+    "prereq": "create-branch-dev"
+  },
+  {
+    "id": "merge-dev",
+    "tier": "intermediate",
+    "order": 6,
+    "title": "Merge 'dev' into 'main'",
+    "description": "Switch back to main and merge dev into it.",
+    "check": "branch_merged_into",
+    "check_args": { "branch": "dev", "into": "main" },
+    "prereq": "switch-branch-dev"
+  },
+  {
+    "id": "stash-changes",
+    "tier": "intermediate",
+    "order": 7,
+    "title": "Stash your changes",
+    "description": "Modify a tracked file, then run `git stash` to shelve the change.",
+    "check": "stash_not_empty",
+    "prereq": "merge-dev"
+  },
+  {
+    "id": "rebase-branch",
+    "tier": "advanced",
+    "order": 8,
+    "title": "Rebase a branch",
+    "description": "Create a branch, add a commit, then rebase it onto main.",
+    "check": "manual_review",
+    "prereq": "stash-changes"
+  },
+  {
+    "id": "cherry-pick",
+    "tier": "advanced",
+    "order": 9,
+    "title": "Cherry-pick a commit",
+    "description": "Cherry-pick a commit from one branch onto another.",
+    "check": "manual_review",
+    "prereq": "rebase-branch"
+  },
+  {
+    "id": "clone-remote",
+    "tier": "expert",
+    "order": 10,
+    "title": "Clone from the practice remote",
+    "description": "Clone your personal bare repo from the git-server: `git clone git://git-server/<your-id>/practice.git`.",
+    "check": "has_remote",
+    "check_args": { "remote": "origin" },
+    "prereq": "cherry-pick"
+  },
+  {
+    "id": "push-remote",
+    "tier": "expert",
+    "order": 11,
+    "title": "Push to the remote",
+    "description": "Commit a change and push it to origin.",
+    "check": "manual_review",
+    "prereq": "clone-remote"
+  }
+]

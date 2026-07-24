@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>learn-git</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #11161d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --green: #2ea043;
+    --green-dim: #23863633;
+    --blue: #58a6ff;
+    --purple: #a371f7;
+    --orange: #f0883e;
+    --red: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+  }
+  header {
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: rgba(13, 17, 23, 0.92);
+    backdrop-filter: blur(6px);
+    z-index: 10;
+  }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  h1 span { color: var(--green); }
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 220px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), #3fb950);
+    border-radius: 99px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .progress-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 32px 64px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .tier-section { margin-bottom: 8px; }
+  .tier-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 28px 0 14px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .tier-heading::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .tier-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tier-beginner .tier-dot { background: var(--green); }
+  .tier-intermediate .tier-dot { background: var(--blue); }
+  .tier-advanced .tier-dot { background: var(--purple); }
+  .tier-expert .tier-dot { background: var(--orange); }
+
+  .task {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    opacity: 0.45;
+    filter: grayscale(0.4);
+    transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  }
+  .task.unlocked { opacity: 1; filter: none; }
+  .task.unlocked:hover { transform: translateY(-1px); border-color: #444c56; }
+  .task.completed {
+    border-color: var(--green);
+    background: linear-gradient(180deg, var(--green-dim), transparent 60%), var(--panel);
+  }
+  .task.locked::before {
+    content: "🔒 ";
+    font-size: 12px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; }
+  .tier-tag { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+  .title { font-size: 15px; font-weight: 600; margin: 4px 0 6px; }
+  .desc { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+  .desc code {
+    background: #1c2129;
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: #e6edf3;
+  }
+  button {
+    background: var(--green);
+    color: white;
+    border: none;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.15s ease;
+  }
+  button:hover:not(:disabled) { background: #2fb84f; }
+  button:disabled { background: var(--border); cursor: not-allowed; color: var(--muted); }
+  button.retry { background: var(--red); }
+  .badge {
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  #terminal-panel {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  #terminal-panel .term-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #terminal-panel .term-header a { color: var(--blue); text-decoration: none; }
+  #terminal-panel iframe {
+    width: 100%;
+    height: 420px;
+    border: none;
+    display: block;
+    background: #000;
+  }
+
+  @media (min-width: 900px) {
+    .layout { grid-template-columns: 1.3fr 1fr; align-items: start; }
+    #terminal-panel { position: sticky; top: 84px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>learn<span>-git</span></h1>
+  <div class="progress-wrap">
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <span class="progress-label" id="progress-label">0 / 0</span>
+  </div>
+</header>
+
+<div class="layout">
+  <div>
+    <div id="tasks">Loading tasks...</div>
+  </div>
+
+  <div id="terminal-panel">
+    <div class="term-header">
+      <span>your terminal</span>
+      <a href="http://localhost:7681" target="_blank">open full screen ↗</a>
+    </div>
+    <iframe src="http://localhost:7681" title="workspace terminal"></iframe>
+  </div>
+</div>
+
+<script>
+const API = "http://localhost:5000";
+const USER_ID = "demo-user"; // replace with real auth later
+
+const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
+
+async function loadTasks() {
+  const res = await fetch(`${API}/api/tasks?user_id=${USER_ID}`);
+  const tasks = await res.json();
+  const container = document.getElementById("tasks");
+  container.innerHTML = "";
+
+  const completedCount = tasks.filter(t => t.completed).length;
+  document.getElementById("progress-fill").style.width =
+    tasks.length ? `${(completedCount / tasks.length) * 100}%` : "0%";
+  document.getElementById("progress-label").innerText = `${completedCount} / ${tasks.length}`;
+
+  const byTier = {};
+  tasks.forEach(t => {
+    (byTier[t.tier] = byTier[t.tier] || []).push(t);
+  });
+
+  TIER_ORDER.forEach(tier => {
+    if (!byTier[tier]) return;
+    const section = document.createElement("div");
+    section.className = "tier-section";
+    section.innerHTML = `<div class="tier-heading tier-${tier}"><span class="tier-dot"></span>${tier}</div>`;
+
+    byTier[tier].forEach(t => {
+      const div = document.createElement("div");
+      div.className = "task"
+        + (t.unlocked ? " unlocked" : " locked")
+        + (t.completed ? " completed" : "");
+      div.innerHTML = `
+        <div class="row">
+          <span class="tier-tag">${t.tier}</span>
+          ${t.completed ? '<span class="badge">✓ complete</span>' : ""}
+        </div>
+        <div class="title">${t.title}</div>
+        <div class="desc">${formatDesc(t.description)}</div>
+        ${t.unlocked && !t.completed ? `<button data-id="${t.id}">Check progress</button>` : ""}
+      `;
+      section.appendChild(div);
+    });
+
+    container.appendChild(section);
+  });
+
+  container.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.classList.remove("retry");
+      btn.innerText = "Checking...";
+      const res = await fetch(`${API}/api/tasks/${btn.dataset.id}/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: USER_ID })
+      });
+      const data = await res.json();
+      if (data.passed) {
+        loadTasks();
+      } else {
+        btn.disabled = false;
+        btn.classList.add("retry");
+        btn.innerText = "Not yet — try again";
+      }
+    });
+  });
+}
+
+function formatDesc(text) {
+  return text.replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+loadTasks();
+</script>
+</body>
+</html>
