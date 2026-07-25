@@ -19,7 +19,7 @@ This covers deploying `learn-git` to your own server or an AWS EC2 instance, wit
    - `22` (SSH) — from your IP only
    - `80` (HTTP) — from anywhere
    - `443` (HTTPS) — from anywhere
-   - Do **not** expose `9418` (git clone/push/pull) publicly unless you specifically want unauthenticated git-over-git-protocol reachable from the internet — most setups should drop this. Everything else (dashboard, API, every student's terminal) only ever goes through the app's own `nginx` container on port 80/443, so no other app ports need opening.
+   - Do **not** expose `9418` (git clone/push/pull) publicly unless you specifically want unauthenticated git-over-git-protocol reachable from the internet — most setups should drop this. Everything else (dashboard, API, every student's terminal) only ever goes through the app's own `nginx` container, published on host port 8080, so no other app ports need opening.
 3. SSH in and install Docker:
    ```bash
    sudo apt update && sudo apt install -y docker.io docker-compose-plugin
@@ -60,7 +60,7 @@ Only `nginx` publishes a port (80). `webapp`, `api`, and every `workspace-*` con
 
 ## 4. Put HTTPS in front of the app's nginx
 
-The container's `nginx.conf` handles routing but listens on plain HTTP (port 80) inside Docker. For a public domain, terminate TLS with certbot on the **host**, in front of the container:
+The container's `nginx.conf` handles routing but listens on plain HTTP inside Docker, published to the host on port **8080**. For a public domain, terminate TLS with certbot on the **host**, in front of the container:
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
@@ -74,7 +74,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:80;   # the app's nginx container, published above
+        proxy_pass http://127.0.0.1:8080;   # the app's nginx container, published above
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

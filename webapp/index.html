@@ -293,6 +293,10 @@ async function loadTasks() {
   });
 }
 
+function formatDesc(text) {
+  return text.replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
 (async () => {
   const me = await requireAuth();
   if (me) loadTasks();

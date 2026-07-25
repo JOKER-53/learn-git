@@ -235,7 +235,13 @@ def login():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
+    reg_no = session.get("reg_no")
     session.clear()
+    if reg_no:
+        try:
+            workspace_manager.restart_workspace(reg_no)
+        except Exception as e:
+            log.error("Failed to restart workspace for %s on logout: %s", reg_no, e)
     return jsonify({"ok": True})
 
 
@@ -328,6 +334,72 @@ def admin_students():
         })
     conn.close()
     return jsonify(out)
+
+
+@app.route("/api/admin/students/<reg_no>", methods=["DELETE"])
+@admin_required
+def admin_delete_student(reg_no):
+    if reg_no == session["reg_no"]:
+        return jsonify({"error": "you cannot delete your own account while signed in"}), 400
+
+    conn = get_db()
+    existing = conn.execute("SELECT reg_no FROM users WHERE reg_no = ?", (reg_no,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": "no such student"}), 404
+
+    conn.execute("DELETE FROM users WHERE reg_no = ?", (reg_no,))
+    conn.execute("DELETE FROM progress WHERE user_id = ?", (reg_no,))
+    conn.commit()
+    conn.close()
+
+    # Best-effort: stop and remove their workspace container too.
+    # Their repo files remain on the students_data volume (not auto-deleted,
+    # in case of accidental deletion) -- remove manually if you also want
+    # the on-disk repo gone.
+    try:
+        workspace_manager.remove_workspace(reg_no)
+    except Exception as e:
+        log.error("Failed to remove workspace container for %s: %s", reg_no, e)
+
+    return jsonify({"ok": True, "deleted": reg_no})
+
+
+@app.route("/api/admin/students/<reg_no>/reset-password", methods=["POST"])
+@admin_required
+def admin_reset_password(reg_no):
+    data = request.get_json(silent=True) or {}
+    new_password = data.get("new_password") or ""
+    if len(new_password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+
+    conn = get_db()
+    existing = conn.execute("SELECT reg_no FROM users WHERE reg_no = ?", (reg_no,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": "no such student"}), 404
+
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE reg_no = ?",
+        (generate_password_hash(new_password), reg_no)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "reg_no": reg_no})
+
+
+@app.route("/api/internal/authorize-terminal")
+def authorize_terminal():
+    """Called by nginx (auth_request) on every /terminal/<reg_no>/ hit.
+    Returns 200 only if the requester's own session belongs to that
+    student, or the requester is an admin. Never called directly by
+    the browser -- nginx marks the matching location `internal`."""
+    target_reg_no = request.headers.get("X-Reg-No", "")
+    if "reg_no" not in session:
+        return "", 401
+    if session["reg_no"] == target_reg_no or session.get("is_admin"):
+        return "", 200
+    return "", 403
 
 
 @app.route("/api/health")
