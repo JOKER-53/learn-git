@@ -226,6 +226,9 @@ function wireModals() {
       return;
     }
     resetModal.classList.remove("open");
+    if (data.new_recovery_code) {
+      alert(`Password reset for ${pendingRegNo}.\n\nTheir new recovery code is:\n${data.new_recovery_code}\n\nGive this to them — it lets them self-reset next time without you.`);
+    }
   });
 
   document.getElementById("delete-confirm").addEventListener("click", async () => {

@@ -37,15 +37,19 @@ The app now ships its own `nginx` container that routes the dashboard, API, and 
 git clone <your-repo-url>
 cd learn-git
 cp .env.example .env
+mkdir -p students-data
 ```
 
 Edit `.env`:
 ```bash
+STUDENTS_HOST_PATH=/absolute/path/to/learn-git/students-data   # REQUIRED -- must be absolute, use `pwd` to get it
 SECRET_KEY=<generate with: python3 -c "import secrets; print(secrets.token_hex(32))">
 ADMIN_REG_NOS=<your reg no, e.g. 21CS045>
 CORS_ORIGIN=https://your-domain.com
 COOKIE_SECURE=true
 ```
+
+`STUDENTS_HOST_PATH` must be an **absolute** path, not `./students-data` -- the `api` container talks to the host Docker daemon over a socket, and it resolves bind-mount sources on the host filesystem, not inside any container's own view. Run `pwd` inside `learn-git/` and append `/students-data` to get the right value.
 
 Build the per-student workspace image first (it's not started directly, only used as a template — see `docker-compose.yml`), then bring the stack up:
 

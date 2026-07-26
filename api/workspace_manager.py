@@ -27,7 +27,13 @@ def client():
 
 NETWORK = os.environ.get("DOCKER_NETWORK", "learn-git_net")
 WORKSPACE_IMAGE = os.environ.get("WORKSPACE_IMAGE", "learn-git-workspace:latest")
-STUDENTS_VOLUME = os.environ.get("STUDENTS_VOLUME", "learn-git_students_data")
+# Absolute HOST path (resolved by the Docker daemon, not by paths inside
+# this api container) to the parent directory holding every student's
+# folder. Each student's container gets ONLY <STUDENTS_HOST_PATH>/<reg_no>
+# bind-mounted at /data -- never the whole tree -- so a student can never
+# touch another student's files, even with `rm -rf /*` as root in their
+# own container.
+STUDENTS_HOST_PATH = os.environ.get("STUDENTS_HOST_PATH")
 
 _SAFE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -47,6 +53,13 @@ def ensure_workspace(reg_no: str) -> str:
     Raises docker.errors.APIError / DockerException on failure -- callers
     should catch and log rather than block login on an orchestration hiccup.
     """
+    if not STUDENTS_HOST_PATH:
+        raise RuntimeError(
+            "STUDENTS_HOST_PATH is not set -- required to isolate each "
+            "student's container to their own folder. Set it in .env to "
+            "an absolute host path, e.g. STUDENTS_HOST_PATH=/home/you/learn-git/students-data"
+        )
+
     name = container_name(reg_no)
     c_client = client()
 
@@ -58,13 +71,17 @@ def ensure_workspace(reg_no: str) -> str:
     except NotFound:
         pass
 
+    student_host_dir = os.path.join(STUDENTS_HOST_PATH, reg_no)
+    # Docker creates this directory on the host automatically if it doesn't
+    # exist yet, since it's a bind mount source.
+
     c_client.containers.run(
         WORKSPACE_IMAGE,
         name=name,
         detach=True,
         network=NETWORK,
         environment={"REG_NO": reg_no},
-        volumes={STUDENTS_VOLUME: {"bind": "/data", "mode": "rw"}},
+        volumes={student_host_dir: {"bind": "/data", "mode": "rw"}},
         restart_policy={"Name": "unless-stopped"},
         mem_limit="256m",
         nano_cpus=500_000_000,  # 0.5 CPU cap per student workspace
