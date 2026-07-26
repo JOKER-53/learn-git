@@ -1,6 +1,6 @@
 # Learn Git
 
-A hands-on, browser/terminal-based platform to learn Git by actually using it — not by reading about it.
+>A hands-on, browser/terminal-based platform to learn Git by actually using it — not by reading about it.
 
 Clone this repo, run `docker compose up`, and start completing real Git tasks in a real terminal. Your progress is saved automatically, even after you shut the environment down.
 
