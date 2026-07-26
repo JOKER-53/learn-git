@@ -14,6 +14,8 @@ Instead:
 
 ## Known Security Considerations (read before deploying publicly)
 
+**Fixed: unauthenticated terminal access (previously present, now closed).** Earlier versions of `nginx.conf` routed `/terminal/<reg_no>/` straight to that student's container with no session check at all — anyone who knew or guessed a valid reg_no could open a live shell into that student's workspace without logging in. This is now closed with an `auth_request` gate: nginx calls `/api/internal/authorize-terminal` on every terminal request, which checks the caller's session cookie actually belongs to that reg_no (or that the caller is an admin) before proxying through. If you forked/copied this project before this fix, rebuild `nginx` and `api` and confirm `nginx.conf` contains an `auth_request` block before deploying.
+
 **Per-student workspace isolation (current state):** each student now gets their own dedicated container (`workspace-<reg_no>`), created on login/registration and reused afterward. Students cannot see or overwrite each other's repos — each writes only to `/data/<reg_no>/repo` on a shared volume, and `nginx` routes `/terminal/<reg_no>/` to that specific container by name. This closes the "shared workspace" gap from earlier versions of this project.
 
 **New tradeoff this introduces: the Docker socket.** To launch per-student containers on demand, the `api` service needs to talk to the Docker daemon, so `docker-compose.yml` mounts `/var/run/docker.sock` into it. This is a significant privilege: **anything that can execute arbitrary code inside the `api` container can control the entire Docker host** (start/stop containers, mount host paths, effectively gain root on the server). Mitigations in place and recommended:

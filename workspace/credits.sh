@@ -1,10 +1,12 @@
 #!/bin/bash
 # Rolls a one-time credits/ASCII intro, then drops into a normal shell.
-# Runs once per container start (flag file lives in the ephemeral container fs,
-# not the persisted volume, so it re-plays on every fresh container --
-# change FLAG to live under /workspace-data if you want it to show only once ever).
+# The flag lives on the persisted per-student volume (/data/<reg_no>/),
+# not the container's ephemeral filesystem -- so it shows exactly once
+# ever per student, even if their workspace container gets recreated.
 
-FLAG="/tmp/.credits_shown"
+STUDENT_DIR="/data/${REG_NO:-anon}"
+mkdir -p "$STUDENT_DIR"
+FLAG="$STUDENT_DIR/.credits_shown"
 
 if [ ! -f "$FLAG" ]; then
   GREEN='\033[0;32m'
@@ -62,7 +64,7 @@ if [ ! -f "$FLAG" ]; then
   touch "$FLAG"
 fi
 
-STUDENT_REPO="/data/${REG_NO:-anon}/repo"
+STUDENT_REPO="$STUDENT_DIR/repo"
 mkdir -p "$STUDENT_REPO"
 cd "$STUDENT_REPO" || cd /data
 exec bash

@@ -76,3 +76,31 @@ def workspace_repo_path(reg_no: str) -> str:
     """Path where THIS (api) container can see the student's repo,
     via the same shared students volume mounted at /data."""
     return f"/data/{reg_no}/repo"
+
+
+def remove_workspace(reg_no: str) -> None:
+    """Stop and remove this student's workspace container.
+    Does NOT delete their repo files on the students_data volume --
+    only the container. Safe to call even if it doesn't exist."""
+    name = container_name(reg_no)
+    c_client = client()
+    try:
+        container = c_client.containers.get(name)
+        container.remove(force=True)
+    except NotFound:
+        pass
+
+
+def restart_workspace(reg_no: str) -> None:
+    """Restart this student's workspace container. Used on logout to kill
+    any live terminal connection (ttyd) tied to their old session -- any
+    tab still open to it will fail to reconnect once nginx re-runs
+    auth_request against the now-cleared session cookie.
+    Safe to call even if the container doesn't exist (no-op)."""
+    name = container_name(reg_no)
+    c_client = client()
+    try:
+        container = c_client.containers.get(name)
+        container.restart(timeout=2)
+    except NotFound:
+        pass

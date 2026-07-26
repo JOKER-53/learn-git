@@ -1,8 +1,9 @@
 services:
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     ports:
-      - "80:80"     # the ONLY externally published port in production
+      - "8080:80"     # the ONLY externally published port in production
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -15,6 +16,7 @@ services:
   webapp:
     build:
       context: ./webapp
+    restart: unless-stopped
     # no published ports -- only reachable through nginx
     depends_on:
       - api
@@ -23,6 +25,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+    restart: unless-stopped
     # no published ports -- only reachable through nginx
     environment:
       - DB_PATH=/dbdata/progress.db
@@ -38,8 +41,9 @@ services:
       - students_data:/data                      # same volume workspace containers use
       - /var/run/docker.sock:/var/run/docker.sock # lets api launch per-student containers
                                                     # SECURITY: see SECURITY.md before public deploy
-    depends_on:
-      - workspace-image
+    # NOTE: no depends_on for workspace-image here -- it's a profiled,
+    # build-only service (see below), and api doesn't need it *running*,
+    # only built beforehand: `docker compose build workspace-image`.
 
   # Not started by `docker compose up` -- exists only so `docker compose build`
   # produces the learn-git-workspace image, which the api then launches per
@@ -53,6 +57,7 @@ services:
 
   git-server:
     image: alpine:3.20
+    restart: unless-stopped
     command: >
       sh -c "apk add --no-cache git openssh &&
              mkdir -p /repos &&
