@@ -35,12 +35,18 @@ services:
       - COOKIE_SECURE=${COOKIE_SECURE:-false}
       - DOCKER_NETWORK=learn-git_net
       - WORKSPACE_IMAGE=learn-git-workspace:latest
-      - STUDENTS_VOLUME=learn-git_students_data
+      # Absolute HOST path (not a path inside any container) to the
+      # students-data directory. Required because api talks to the HOST
+      # Docker daemon over the socket -- any bind-mount source it asks the
+      # daemon to use is resolved on the host, not inside api's own
+      # container. Set this in .env to an absolute path, e.g.
+      # STUDENTS_HOST_PATH=/home/you/learn-git/students-data
+      - STUDENTS_HOST_PATH=${STUDENTS_HOST_PATH}
     volumes:
       - progress_data:/dbdata
-      - students_data:/data                      # same volume workspace containers use
-      - /var/run/docker.sock:/var/run/docker.sock # lets api launch per-student containers
-                                                    # SECURITY: see SECURITY.md before public deploy
+      - ${STUDENTS_HOST_PATH}:/data                # api gets the WHOLE tree (trusted, for validation across all students)
+      - /var/run/docker.sock:/var/run/docker.sock  # lets api launch per-student containers
+                                                     # SECURITY: see SECURITY.md before public deploy
     # NOTE: no depends_on for workspace-image here -- it's a profiled,
     # build-only service (see below), and api doesn't need it *running*,
     # only built beforehand: `docker compose build workspace-image`.
@@ -59,7 +65,7 @@ services:
     image: alpine:3.20
     restart: unless-stopped
     command: >
-      sh -c "apk add --no-cache git openssh &&
+      sh -c "apk add --no-cache git git-daemon &&
              mkdir -p /repos &&
              git daemon --base-path=/repos --export-all --reuseaddr --verbose /repos"
     ports:
@@ -72,6 +78,5 @@ networks:
     name: learn-git_net
 
 volumes:
-  students_data:     # every student's repo, namespaced by reg_no -- survives docker compose down
   progress_data:      # accounts + task completion DB -- survives docker compose down
   git_server_data:     # bare repos for remote/push/pull tasks

@@ -14,6 +14,8 @@ Instead:
 
 ## Known Security Considerations (read before deploying publicly)
 
+**Fixed: cross-student data destruction.** Earlier versions mounted the *entire* shared students volume into every student's container at `/data` -- the per-student folder separation was only a convention (`cd /data/<reg_no>/repo`), not an actual filesystem boundary. A student running `rm -rf /*` (or even just `rm -rf /data/*`) as root in their own container could destroy every other student's repo, not just their own. This is now fixed: each student's container bind-mounts *only* `<STUDENTS_HOST_PATH>/<reg_no>` at `/data` -- they can no longer reach any other student's files even as root, because those files were never mounted into their container in the first place. Only the trusted `api` container still sees the full tree (needed to validate every student's tasks).
+
 **Fixed: unauthenticated terminal access (previously present, now closed).** Earlier versions of `nginx.conf` routed `/terminal/<reg_no>/` straight to that student's container with no session check at all — anyone who knew or guessed a valid reg_no could open a live shell into that student's workspace without logging in. This is now closed with an `auth_request` gate: nginx calls `/api/internal/authorize-terminal` on every terminal request, which checks the caller's session cookie actually belongs to that reg_no (or that the caller is an admin) before proxying through. If you forked/copied this project before this fix, rebuild `nginx` and `api` and confirm `nginx.conf` contains an `auth_request` block before deploying.
 
 **Per-student workspace isolation (current state):** each student now gets their own dedicated container (`workspace-<reg_no>`), created on login/registration and reused afterward. Students cannot see or overwrite each other's repos — each writes only to `/data/<reg_no>/repo` on a shared volume, and `nginx` routes `/terminal/<reg_no>/` to that specific container by name. This closes the "shared workspace" gap from earlier versions of this project.
@@ -29,8 +31,9 @@ Other items before deploying to AWS/a public server:
 - Set `COOKIE_SECURE=true` and serve everything over HTTPS (see DEPLOYMENT.md).
 - Restrict `CORS_ORIGIN` to your actual frontend domain instead of `*`.
 - Only `nginx`'s port 80/443 should be publicly reachable — `api`, `webapp`, and student `workspace-*` containers have no published ports and are only reachable through the proxy. Don't add `ports:` to those services when deploying.
-- Rate-limit `/api/auth/login` and `/api/auth/register` to reduce brute-force risk (not yet implemented — add at the nginx layer with `limit_req` or in Flask).
+- **Fixed:** `/api/auth/login`, `/api/auth/register`, and `/api/auth/forgot-password` are now rate-limited in-app (see `rate_limit()` in `api/app.py`) — 8 login attempts / 5 registration or reset attempts per 5 minutes per IP. This is an in-memory limiter, correct only for a single `api` process; if you ever scale `api` to multiple replicas, move this to a shared store (Redis) since each replica would otherwise track its own separate counts.
 - Student containers currently don't auto-expire — long-running idle containers accumulate. Consider a cleanup job that stops workspaces inactive for N days.
+- **Self-service password reset** uses an 8-character recovery code (shown once, at registration) instead of email, since this app has no email/SMTP integration. The code is hashed at rest like a password. Tradeoffs to know: if a student loses their code, only an admin can get them back in (via the admin panel's reset, which also issues a fresh recovery code); if a student's code leaks, whoever has it can reset that account's password — treat it with the same care as a password.
 
 ## Password Storage
 

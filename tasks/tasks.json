@@ -66,27 +66,49 @@
     "prereq": "merge-dev"
   },
   {
+    "id": "tag-commit",
+    "tier": "intermediate",
+    "order": 8,
+    "title": "Tag a commit",
+    "description": "Create an annotated or lightweight tag named `v1.0` on your current commit: `git tag v1.0`.",
+    "check": "tag_exists",
+    "check_args": { "tag": "v1.0" },
+    "prereq": "stash-changes"
+  },
+  {
+    "id": "delete-branch",
+    "tier": "intermediate",
+    "order": 9,
+    "title": "Delete the 'dev' branch",
+    "description": "Now that dev is merged, clean it up: `git branch -d dev`.",
+    "check": "branch_deleted",
+    "check_args": { "branch": "dev" },
+    "prereq": "tag-commit"
+  },
+  {
     "id": "rebase-branch",
     "tier": "advanced",
-    "order": 8,
+    "order": 10,
     "title": "Rebase a branch",
-    "description": "Create a branch, add a commit, then rebase it onto main.",
-    "check": "manual_review",
-    "prereq": "stash-changes"
+    "description": "Create a branch called `feature`, add at least one commit on it, then run `git rebase main` while on `feature` so its commit(s) sit cleanly on top of main's history.",
+    "check": "rebase_onto",
+    "check_args": { "branch": "feature", "onto": "main" },
+    "prereq": "delete-branch"
   },
   {
     "id": "cherry-pick",
     "tier": "advanced",
-    "order": 9,
+    "order": 11,
     "title": "Cherry-pick a commit",
-    "description": "Cherry-pick a commit from one branch onto another.",
-    "check": "manual_review",
+    "description": "Switch to `main`, find a commit hash from `feature` (`git log feature --oneline`), and run `git cherry-pick <hash>` to bring just that commit onto main.",
+    "check": "cherry_picked",
+    "check_args": { "source": "feature", "target": "main" },
     "prereq": "rebase-branch"
   },
   {
     "id": "clone-remote",
     "tier": "expert",
-    "order": 10,
+    "order": 12,
     "title": "Clone from the practice remote",
     "description": "Clone your personal bare repo from the git-server: `git clone git://git-server/<your-id>/practice.git`.",
     "check": "has_remote",
@@ -96,10 +118,30 @@
   {
     "id": "push-remote",
     "tier": "expert",
-    "order": 11,
+    "order": 13,
     "title": "Push to the remote",
-    "description": "Commit a change and push it to origin.",
-    "check": "manual_review",
+    "description": "Commit a change on `main` and push it: `git push origin main`.",
+    "check": "in_sync_with_remote",
+    "check_args": { "branch": "main", "remote": "origin" },
     "prereq": "clone-remote"
+  },
+  {
+    "id": "pull-remote",
+    "tier": "expert",
+    "order": 14,
+    "title": "Pull from the remote",
+    "description": "Make a change directly in the bare repo from another clone (or just run `git fetch origin && git merge origin/main`), then confirm your local main is in sync by running `git pull origin main`.",
+    "check": "in_sync_with_remote",
+    "check_args": { "branch": "main", "remote": "origin" },
+    "prereq": "push-remote"
+  },
+  {
+    "id": "resolve-conflict",
+    "tier": "expert",
+    "order": 15,
+    "title": "Resolve a merge conflict",
+    "description": "Create two branches that each edit the same line of the same file differently, merge one into the other, resolve the conflict markers by hand, `git add` the fixed file, and complete the merge with `git commit`.",
+    "check": "conflict_resolved",
+    "prereq": "pull-remote"
   }
 ]

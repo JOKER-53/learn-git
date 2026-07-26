@@ -12,6 +12,8 @@ import logging
 import os
 import sqlite3
 import subprocess
+import time
+from collections import defaultdict
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -69,8 +71,25 @@ def get_db():
             PRIMARY KEY (user_id, task_id)
         )
     """)
+    # Migration: recovery_code_hash was added after the initial release.
+    # SQLite has no "ADD COLUMN IF NOT EXISTS", so probe and add if missing --
+    # this keeps existing deployments' databases working without a manual step.
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "recovery_code_hash" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN recovery_code_hash TEXT")
     conn.commit()
     return conn
+
+
+def generate_recovery_code():
+    """8-char human-typeable code, e.g. 'A3F9-K2QZ'. Shown once at
+    registration; the student must save it to self-serve a password reset
+    later without needing an admin."""
+    import secrets
+    import string
+    alphabet = string.ascii_uppercase + string.digits
+    raw = "".join(secrets.choice(alphabet) for _ in range(8))
+    return f"{raw[:4]}-{raw[4:]}"
 
 
 def run_git(reg_no, *args):
@@ -92,6 +111,34 @@ def start_workspace_safely(reg_no):
         workspace_manager.ensure_workspace(reg_no)
     except Exception as e:
         log.error("Failed to start workspace for %s: %s", reg_no, e)
+
+
+# ---- Rate limiting ----
+# Simple in-memory sliding-window limiter -- fine for a single-process app
+# like this one. If you ever run multiple api replicas behind a load
+# balancer, swap this for something shared (e.g. Redis) since each
+# process would otherwise track its own separate counts.
+_rate_limit_hits = defaultdict(list)
+
+
+def rate_limit(max_attempts, window_seconds):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            ip = request.headers.get("X-Real-IP", request.remote_addr) or "unknown"
+            key = f"{f.__name__}:{ip}"
+            now = time.time()
+            hits = _rate_limit_hits[key]
+            hits[:] = [t for t in hits if now - t < window_seconds]
+            if len(hits) >= max_attempts:
+                retry_after = int(window_seconds - (now - hits[0]))
+                return jsonify({
+                    "error": f"Too many attempts. Try again in {max(retry_after, 1)}s."
+                }), 429
+            hits.append(now)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # ---- Auth helpers ----
@@ -155,6 +202,90 @@ def check_has_remote(reg_no, args):
     return ok and args["remote"] in out.splitlines()
 
 
+def check_rebase_onto(reg_no, args):
+    """True if `branch` sits linearly on top of `onto` -- onto is an
+    ancestor of branch, branch has at least one commit onto doesn't,
+    and none of those commits are merge commits (a real rebase never
+    creates merge commits; a merge would)."""
+    branch, onto = args["branch"], args["onto"]
+
+    ok, _ = run_git(reg_no, "rev-parse", "--verify", branch)
+    if not ok:
+        return False
+
+    ok, _ = run_git(reg_no, "merge-base", "--is-ancestor", onto, branch)
+    if not ok:
+        return False
+
+    ok, ahead = run_git(reg_no, "rev-list", "--count", f"{onto}..{branch}")
+    if not ok or not ahead.isdigit() or int(ahead) < 1:
+        return False
+
+    ok, merges = run_git(reg_no, "log", "--merges", "--oneline", f"{onto}..{branch}")
+    return ok and merges.strip() == ""
+
+
+def check_cherry_picked(reg_no, args):
+    """True if `target` contains a commit whose message matches one that's
+    unique to `source` (relative to their common ancestor), but with a
+    different commit hash -- exactly what cherry-pick produces: a new
+    commit, same content/message, different SHA."""
+    source, target = args["source"], args["target"]
+
+    ok, base = run_git(reg_no, "merge-base", source, target)
+    if not ok or not base:
+        return False
+
+    ok, source_log = run_git(reg_no, "log", "--format=%H %s", f"{base}..{source}")
+    if not ok:
+        return False
+    source_commits = {}
+    for line in source_log.splitlines():
+        h, _, msg = line.partition(" ")
+        source_commits[msg] = h
+
+    ok, target_log = run_git(reg_no, "log", "--format=%H %s", f"{base}..{target}")
+    if not ok:
+        return False
+    for line in target_log.splitlines():
+        h, _, msg = line.partition(" ")
+        if msg in source_commits and h != source_commits[msg]:
+            return True
+    return False
+
+
+def check_in_sync_with_remote(reg_no, args):
+    """True if the local branch and its remote-tracking ref point at the
+    same commit -- git only updates the remote-tracking ref on a
+    successful push or fetch/pull, so this confirms it actually happened."""
+    branch = args.get("branch", "main")
+    remote = args.get("remote", "origin")
+    ok1, local_sha = run_git(reg_no, "rev-parse", branch)
+    ok2, remote_sha = run_git(reg_no, "rev-parse", f"{remote}/{branch}")
+    return ok1 and ok2 and local_sha and local_sha == remote_sha
+
+
+def check_tag_exists(reg_no, args):
+    ok, out = run_git(reg_no, "tag", "--list", args["tag"])
+    return ok and args["tag"] in out.splitlines()
+
+
+def check_branch_deleted(reg_no, args):
+    ok, out = run_git(reg_no, "branch", "--list", args["branch"])
+    return ok and args["branch"] not in out
+
+
+def check_conflict_resolved(reg_no, _args):
+    """True if there are no unresolved merge conflicts left, and a merge
+    commit (2+ parents) exists in history -- confirms a real conflict was
+    hit and actually resolved, not just avoided."""
+    ok, unmerged = run_git(reg_no, "diff", "--name-only", "--diff-filter=U")
+    if not ok or unmerged.strip():
+        return False
+    ok, merge_commit = run_git(reg_no, "log", "--merges", "-1", "--oneline")
+    return ok and merge_commit.strip() != ""
+
+
 def check_manual_review(reg_no, _args):
     return False
 
@@ -167,6 +298,12 @@ VALIDATORS = {
     "branch_merged_into": check_branch_merged_into,
     "stash_not_empty": check_stash_not_empty,
     "has_remote": check_has_remote,
+    "rebase_onto": check_rebase_onto,
+    "cherry_picked": check_cherry_picked,
+    "in_sync_with_remote": check_in_sync_with_remote,
+    "tag_exists": check_tag_exists,
+    "branch_deleted": check_branch_deleted,
+    "conflict_resolved": check_conflict_resolved,
     "manual_review": check_manual_review,
 }
 
@@ -174,6 +311,7 @@ VALIDATORS = {
 # ---- Auth routes ----
 
 @app.route("/api/auth/register", methods=["POST"])
+@rate_limit(max_attempts=5, window_seconds=300)
 def register():
     data = request.get_json(silent=True) or {}
     reg_no = (data.get("reg_no") or "").strip()
@@ -193,9 +331,10 @@ def register():
         return jsonify({"error": "account already exists"}), 409
 
     is_admin = 1 if reg_no in ADMIN_REG_NOS else 0
+    recovery_code = generate_recovery_code()
     conn.execute(
-        "INSERT INTO users (reg_no, password_hash, is_admin) VALUES (?, ?, ?)",
-        (reg_no, generate_password_hash(password), is_admin)
+        "INSERT INTO users (reg_no, password_hash, is_admin, recovery_code_hash) VALUES (?, ?, ?, ?)",
+        (reg_no, generate_password_hash(password), is_admin, generate_password_hash(recovery_code))
     )
     conn.commit()
     conn.close()
@@ -205,11 +344,13 @@ def register():
     start_workspace_safely(reg_no)
     return jsonify({
         "ok": True, "reg_no": reg_no, "is_admin": bool(is_admin),
+        "recovery_code": recovery_code,
         "terminal_path": f"/terminal/{reg_no}/",
     })
 
 
 @app.route("/api/auth/login", methods=["POST"])
+@rate_limit(max_attempts=8, window_seconds=300)
 def login():
     data = request.get_json(silent=True) or {}
     reg_no = (data.get("reg_no") or "").strip()
@@ -231,6 +372,40 @@ def login():
         "ok": True, "reg_no": reg_no, "is_admin": bool(row[1]),
         "terminal_path": f"/terminal/{reg_no}/",
     })
+
+
+@app.route("/api/auth/forgot-password", methods=["POST"])
+@rate_limit(max_attempts=5, window_seconds=300)
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    reg_no = (data.get("reg_no") or "").strip()
+    recovery_code = (data.get("recovery_code") or "").strip().upper()
+    new_password = data.get("new_password") or ""
+
+    if len(new_password) < 6:
+        return jsonify({"error": "new password must be at least 6 characters"}), 400
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT recovery_code_hash FROM users WHERE reg_no = ?", (reg_no,)
+    ).fetchone()
+
+    # Same generic error whether the account doesn't exist or the code is
+    # wrong -- don't let this endpoint be used to check which reg_nos exist.
+    invalid = not row or not row[0] or not check_password_hash(row[0], recovery_code)
+    if invalid:
+        conn.close()
+        return jsonify({"error": "invalid registration number or recovery code"}), 401
+
+    new_recovery_code = generate_recovery_code()
+    conn.execute(
+        "UPDATE users SET password_hash = ?, recovery_code_hash = ? WHERE reg_no = ?",
+        (generate_password_hash(new_password), generate_password_hash(new_recovery_code), reg_no)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True, "new_recovery_code": new_recovery_code})
 
 
 @app.route("/api/auth/logout", methods=["POST"])
@@ -379,13 +554,14 @@ def admin_reset_password(reg_no):
         conn.close()
         return jsonify({"error": "no such student"}), 404
 
+    new_recovery_code = generate_recovery_code()
     conn.execute(
-        "UPDATE users SET password_hash = ? WHERE reg_no = ?",
-        (generate_password_hash(new_password), reg_no)
+        "UPDATE users SET password_hash = ?, recovery_code_hash = ? WHERE reg_no = ?",
+        (generate_password_hash(new_password), generate_password_hash(new_recovery_code), reg_no)
     )
     conn.commit()
     conn.close()
-    return jsonify({"ok": True, "reg_no": reg_no})
+    return jsonify({"ok": True, "reg_no": reg_no, "new_recovery_code": new_recovery_code})
 
 
 @app.route("/api/internal/authorize-terminal")
