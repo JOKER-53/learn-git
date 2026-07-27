@@ -54,7 +54,12 @@ with open(TASKS_PATH) as f:
 
 def get_db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    # WAL mode lets readers and writers proceed concurrently instead of
+    # locking the whole file on every write -- matters once multiple
+    # gunicorn worker processes are hitting this DB at once.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             reg_no TEXT PRIMARY KEY,
