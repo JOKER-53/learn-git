@@ -33,6 +33,7 @@ services:
       - ADMIN_REG_NOS=${ADMIN_REG_NOS:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
       - DOCKER_NETWORK=learn-git_net
       - WORKSPACE_IMAGE=learn-git-workspace:latest
       # Absolute HOST path (not a path inside any container) to the

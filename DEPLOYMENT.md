@@ -118,3 +118,21 @@ certbot will rewrite the host config to listen on 443 with your cert and auto-re
   ```
 - **Updating:** `git pull && docker compose up -d --build`
 - **Renewing HTTPS:** certbot sets up auto-renewal via a systemd timer/cron — verify with `sudo certbot renew --dry-run`
+
+## 7. Serving many concurrent students
+
+Short version: **you don't need a traditional load balancer for a single-EC2 classroom deployment** — the architecture already dedicates one container per student, so the bottlenecks are elsewhere. Here's what actually matters as your student count grows:
+
+**Instance size is the real constraint.** Each connected student holds a workspace container capped at 256MB RAM / 0.5 vCPU (`workspace_manager.py`). Budget roughly that much per *simultaneously connected* student when picking an instance size — 30 concurrent students could need up to ~7.5GB RAM and use up to 15 vCPU-equivalents under full load. A `t3.large` will struggle well before 20 students; something like `t3.2xlarge` (32GB/8vCPU) or a compute-optimized instance is more realistic for a full classroom session. Size up before the first real class, not after it lags.
+
+**`api` runs under gunicorn** (multiple worker processes + threads, not Flask's single-threaded dev server) so task-check and dashboard requests don't queue behind each other. Tune worker count via the `WEB_CONCURRENCY` env var if you have more CPU headroom:
+```bash
+# .env
+WEB_CONCURRENCY=8
+```
+
+**SQLite runs in WAL mode**, which handles concurrent reads/writes from multiple `api` workers reasonably well for a classroom-scale student count (tens to low hundreds). If you ever outgrow SQLite (very large deployments, many admins/instructors hitting the admin dashboard simultaneously), migrating to Postgres would be the next step — not something to do preemptively.
+
+**When you'd actually want a load balancer:** only if you split this across *multiple hosts* (e.g. running out of RAM/CPU on one EC2 instance, or wanting redundancy). That's a bigger architectural change than this app currently supports out of the box — student containers, the SQLite DB, and the Docker socket access are all tied to a single host right now. If you get to the point of genuinely needing multi-host scaling (hundreds of concurrent students), that's worth a dedicated conversation rather than a quick config tweak — it touches session storage, the DB, and how student containers get scheduled across hosts.
+
+**Practical recommendation for a normal class size (up to a few dozen concurrent students):** one appropriately-sized EC2 instance, the gunicorn + WAL changes above, and you're fine without any load balancer.
