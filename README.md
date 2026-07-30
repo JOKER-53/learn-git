@@ -1,4 +1,4 @@
-# Learn Git
+# Learn-Git
 
 >A hands-on, browser/terminal-based platform to learn Git by actually using it — not by reading about it.
 
