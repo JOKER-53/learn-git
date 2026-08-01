@@ -116,6 +116,10 @@ def start_workspace_safely(reg_no):
         workspace_manager.ensure_workspace(reg_no)
     except Exception as e:
         log.error("Failed to start workspace for %s: %s", reg_no, e)
+    try:
+        workspace_manager.ensure_git_remote(reg_no)
+    except Exception as e:
+        log.error("Failed to create git remote for %s: %s", reg_no, e)
 
 
 # ---- Rate limiting ----
