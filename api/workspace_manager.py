@@ -121,3 +121,37 @@ def restart_workspace(reg_no: str) -> None:
         container.restart(timeout=2)
     except NotFound:
         pass
+
+
+def _find_git_server():
+    """Locate the git-server container by its compose service label rather
+    than a hardcoded name, so this keeps working regardless of the compose
+    project name. Returns None if not found (git-server not running)."""
+    c_client = client()
+    containers = c_client.containers.list(
+        filters={"label": "com.docker.compose.service=git-server"}
+    )
+    return containers[0] if containers else None
+
+
+def ensure_git_remote(reg_no: str) -> None:
+    """Create this student's bare repo on the git-server, if it doesn't
+    already exist, so the clone-remote task actually has something to
+    clone at git://git-server/<reg_no>/practice.git. Safe to call
+    repeatedly -- `git init --bare` on an already-initialized repo is a
+    harmless no-op."""
+    if not is_safe_reg_no(reg_no):
+        raise ValueError(f"unsafe reg_no for git-server path: {reg_no!r}")
+
+    git_server = _find_git_server()
+    if git_server is None:
+        raise RuntimeError("git-server container not found (is it running?)")
+
+    repo_path = f"/repos/{reg_no}/practice.git"
+    exit_code, output = git_server.exec_run(
+        ["sh", "-c", f"mkdir -p {repo_path} && git init --bare -q {repo_path}"]
+    )
+    if exit_code != 0:
+        raise RuntimeError(
+            f"git init --bare failed for {reg_no}: {output.decode(errors='replace')}"
+        )

@@ -4,7 +4,7 @@
     "tier": "beginner",
     "order": 1,
     "title": "Initialize a repository",
-    "description": "Run `git init` inside your workspace to create a new Git repository.",
+    "description": "Turn your workspace into a Git repository. There's a single command that starts tracking a folder with Git — find it.",
     "check": "repo_exists",
     "prereq": null
   },
@@ -13,7 +13,7 @@
     "tier": "beginner",
     "order": 2,
     "title": "Make your first commit",
-    "description": "Create any file, `git add` it, and commit it with any message.",
+    "description": "Create a file, stage it, and record it as a commit with a message. Three separate steps — create, stage, commit.",
     "check": "has_commit",
     "prereq": "init-repo"
   },
@@ -22,7 +22,7 @@
     "tier": "beginner",
     "order": 3,
     "title": "Check repository status",
-    "description": "Modify a tracked file and run `git status` to see it listed as changed. (We just check that a commit history exists and working tree has been touched.)",
+    "description": "Change a file that's already tracked, then check what Git thinks is different in your working directory right now.",
     "check": "has_commit",
     "prereq": "first-commit"
   },
@@ -31,7 +31,7 @@
     "tier": "intermediate",
     "order": 4,
     "title": "Create a new branch named 'dev'",
-    "description": "Run `git branch dev` or `git checkout -b dev` to create a branch called 'dev'.",
+    "description": "Branches let you work on something without touching main. Create one called 'dev'.",
     "check": "branch_exists",
     "check_args": { "branch": "dev" },
     "prereq": "first-commit"
@@ -41,7 +41,7 @@
     "tier": "intermediate",
     "order": 5,
     "title": "Switch to the 'dev' branch",
-    "description": "Run `git checkout dev` (or `git switch dev`) so HEAD points at 'dev'.",
+    "description": "Move your working directory so it's pointing at 'dev' instead of wherever you are now.",
     "check": "current_branch_is",
     "check_args": { "branch": "dev" },
     "prereq": "create-branch-dev"
@@ -51,7 +51,7 @@
     "tier": "intermediate",
     "order": 6,
     "title": "Merge 'dev' into 'main'",
-    "description": "Switch back to main and merge dev into it.",
+    "description": "Bring the work on 'dev' back into 'main'. Think about which branch you need to be standing on before you run the merge.",
     "check": "branch_merged_into",
     "check_args": { "branch": "dev", "into": "main" },
     "prereq": "switch-branch-dev"
@@ -61,7 +61,7 @@
     "tier": "intermediate",
     "order": 7,
     "title": "Stash your changes",
-    "description": "Modify a tracked file, then run `git stash` to shelve the change.",
+    "description": "You've got uncommitted changes you're not ready to commit, but you need a clean working directory. Shelve them without losing them.",
     "check": "stash_not_empty",
     "prereq": "merge-dev"
   },
@@ -70,7 +70,7 @@
     "tier": "intermediate",
     "order": 8,
     "title": "Tag a commit",
-    "description": "Create an annotated or lightweight tag named `v1.0` on your current commit: `git tag v1.0`.",
+    "description": "Mark your current commit as a release point named `v1.0` so you can always find it later, even after history moves on.",
     "check": "tag_exists",
     "check_args": { "tag": "v1.0" },
     "prereq": "stash-changes"
@@ -80,7 +80,7 @@
     "tier": "intermediate",
     "order": 9,
     "title": "Delete the 'dev' branch",
-    "description": "Now that dev is merged, clean it up: `git branch -d dev`.",
+    "description": "Now that dev's work is merged, it's clutter. Remove the branch (not the commits — those are safe in main).",
     "check": "branch_deleted",
     "check_args": { "branch": "dev" },
     "prereq": "tag-commit"
@@ -90,7 +90,7 @@
     "tier": "advanced",
     "order": 10,
     "title": "Rebase a branch",
-    "description": "Create a branch called `feature`, add at least one commit on it, then run `git rebase main` while on `feature` so its commit(s) sit cleanly on top of main's history.",
+    "description": "Create a branch called `feature` and commit at least one change on it. Then replay those commits on top of main's current tip instead of merging — the result should be a straight line of history, no merge commit.",
     "check": "rebase_onto",
     "check_args": { "branch": "feature", "onto": "main" },
     "prereq": "delete-branch"
@@ -100,7 +100,7 @@
     "tier": "advanced",
     "order": 11,
     "title": "Cherry-pick a commit",
-    "description": "Switch to `main`, find a commit hash from `feature` (`git log feature --oneline`), and run `git cherry-pick <hash>` to bring just that commit onto main.",
+    "description": "You want just ONE commit from `feature`, not the whole branch, applied to `main`. Find its commit hash and bring only that one across.",
     "check": "cherry_picked",
     "check_args": { "source": "feature", "target": "main" },
     "prereq": "rebase-branch"
@@ -110,7 +110,7 @@
     "tier": "expert",
     "order": 12,
     "title": "Clone from the practice remote",
-    "description": "Clone your personal bare repo from the git-server: `git clone git://git-server/<your-id>/practice.git`.",
+    "description": "There's a bare Git repo waiting for you on the git-server at `git://git-server/<your-reg-no>/practice.git`. Get a working copy of it onto your machine.",
     "check": "has_remote",
     "check_args": { "remote": "origin" },
     "prereq": "cherry-pick"
@@ -120,7 +120,7 @@
     "tier": "expert",
     "order": 13,
     "title": "Push to the remote",
-    "description": "Commit a change on `main` and push it: `git push origin main`.",
+    "description": "Commit a change on `main` in your cloned copy, then send that commit up to the remote so it's reflected there too.",
     "check": "in_sync_with_remote",
     "check_args": { "branch": "main", "remote": "origin" },
     "prereq": "clone-remote"
@@ -130,7 +130,7 @@
     "tier": "expert",
     "order": 14,
     "title": "Pull from the remote",
-    "description": "Make a change directly in the bare repo from another clone (or just run `git fetch origin && git merge origin/main`), then confirm your local main is in sync by running `git pull origin main`.",
+    "description": "The remote has moved ahead of your local copy (fetch it and see). Bring your local `main` up to date with the remote in one step.",
     "check": "in_sync_with_remote",
     "check_args": { "branch": "main", "remote": "origin" },
     "prereq": "push-remote"
@@ -140,7 +140,7 @@
     "tier": "expert",
     "order": 15,
     "title": "Resolve a merge conflict",
-    "description": "Create two branches that each edit the same line of the same file differently, merge one into the other, resolve the conflict markers by hand, `git add` the fixed file, and complete the merge with `git commit`.",
+    "description": "Set up two branches that each change the same line of the same file differently. Merge one into the other, deal with the conflict Git can't resolve on its own, and finish the merge.",
     "check": "conflict_resolved",
     "prereq": "pull-remote"
   }

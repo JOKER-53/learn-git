@@ -1,14 +1,32 @@
+# Secrets / local config
+.env
+*.bak
+
+# Python
 __pycache__/
 *.pyc
-.env
-*.db
+*.pyo
+
+# Node (if ever added)
 node_modules/
 
-# OS/editor cruft
+# Databases
+*.db
+*.db-wal
+*.db-shm
+
+# Runtime data that must never be committed -- real student work and
+# repos, created by workspace containers via the STUDENTS_HOST_PATH
+# bind mount (see .env.example).
+students-data/
+
+# OS / editor cruft
 .DS_Store
+Thumbs.db
 *.swp
 .idea/
 .vscode/
 
-# docker
+# Logs
 *.log
+students-data/
