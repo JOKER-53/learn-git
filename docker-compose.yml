@@ -12,6 +12,13 @@ services:
     networks:
       default:
         aliases: []
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   webapp:
     build:
@@ -20,6 +27,13 @@ services:
     # no published ports -- only reachable through nginx
     depends_on:
       - api
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/login.html"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   api:
     build:
@@ -43,11 +57,23 @@ services:
       # container. Set this in .env to an absolute path, e.g.
       # STUDENTS_HOST_PATH=/home/you/learn-git/students-data
       - STUDENTS_HOST_PATH=${STUDENTS_HOST_PATH}
+      # Idle-workspace reaper: any student's container untouched for this
+      # many hours gets stopped automatically to reclaim resources. Their
+      # repo data is untouched -- ensure_workspace() just starts a fresh
+      # container next time they log in.
+      - IDLE_WORKSPACE_HOURS=${IDLE_WORKSPACE_HOURS:-24}
     volumes:
       - progress_data:/dbdata
       - ${STUDENTS_HOST_PATH}:/data                # api gets the WHOLE tree (trusted, for validation across all students)
       - /var/run/docker.sock:/var/run/docker.sock  # lets api launch per-student containers
                                                      # SECURITY: see SECURITY.md before public deploy
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     # NOTE: no depends_on for workspace-image here -- it's a profiled,
     # build-only service (see below), and api doesn't need it *running*,
     # only built beforehand: `docker compose build workspace-image`.
@@ -73,6 +99,13 @@ services:
       - "9418:9418"   # git:// protocol -- exposed intentionally for clone/push/pull tasks
     volumes:
       - git_server_data:/repos
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "sh", "-c", "netstat -tln 2>/dev/null | grep -q :9418 || ss -tln 2>/dev/null | grep -q :9418"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 networks:
   default:
