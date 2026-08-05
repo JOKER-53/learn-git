@@ -539,7 +539,47 @@ def admin_students():
     return jsonify(out)
 
 
-@app.route("/api/admin/students/<reg_no>", methods=["DELETE"])
+@app.route("/api/admin/metrics")
+@admin_required
+def admin_metrics():
+    conn = get_db()
+    total_students = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    active_15m = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE last_seen > datetime('now', '-15 minutes')"
+    ).fetchone()[0]
+    active_1h = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE last_seen > datetime('now', '-1 hour')"
+    ).fetchone()[0]
+    conn.close()
+
+    try:
+        container_metrics = workspace_manager.get_metrics()
+    except Exception as e:
+        log.error("Failed to gather container metrics: %s", e)
+        return jsonify({"error": "failed to gather container metrics"}), 500
+
+    workspaces = container_metrics["workspaces"]
+    running = [w for w in workspaces if w["status"] == "running"]
+    total_mem_used = sum(w.get("mem_used_mb") or 0 for w in running)
+    total_mem_cap = sum(w.get("mem_limit_mb") or 0 for w in running)
+
+    return jsonify({
+        "students": {
+            "total": total_students,
+            "active_last_15min": active_15m,
+            "active_last_hour": active_1h,
+        },
+        "workspaces": {
+            "running": len(running),
+            "stopped": len(workspaces) - len(running),
+            "total_ever_created": len(workspaces),
+            "total_mem_used_mb": round(total_mem_used, 1),
+            "total_mem_cap_mb": round(total_mem_cap, 1),
+            "detail": workspaces,
+        },
+        "core_services": container_metrics["core_services"],
+        "idle_workspace_hours": IDLE_WORKSPACE_HOURS,
+    })
 @admin_required
 def admin_delete_student(reg_no):
     if reg_no == session["reg_no"]:
