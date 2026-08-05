@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, Develop]
+  pull_request:
+    branches: [main, Develop]
+
+jobs:
+  check:
+    name: Lint & build check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        run: pip install flask flask-cors docker werkzeug gunicorn
+
+      - name: Syntax-check Python files
+        run: |
+          python3 -m py_compile api/app.py
+          python3 -m py_compile api/workspace_manager.py
+          echo "Python syntax OK"
+
+      - name: Validate tasks.json
+        run: |
+          python3 -c "
+          import json, sys
+          tasks = json.load(open('tasks/tasks.json'))
+          ids = {t['id'] for t in tasks}
+          for t in tasks:
+              prereq = t.get('prereq')
+              if prereq and prereq not in ids:
+                  print(f'ERROR: task {t[\"id\"]} has unknown prereq {prereq!r}')
+                  sys.exit(1)
+          print(f'tasks.json valid: {len(tasks)} tasks, all prereqs resolve')
+          "
+
+      - name: Build Docker images
+        run: |
+          docker compose build workspace-image
+          docker compose build api
+          docker compose build webapp
+          echo "All images built successfully"
+
+      - name: Smoke test api starts
+        run: |
+          # create minimal env for smoke test (no real docker socket available in CI)
+          cat > .env << 'ENVEOF'
+          SECRET_KEY=ci-test-key-not-real
+          STUDENTS_HOST_PATH=/tmp/students-data
+          ADMIN_REG_NOS=
+          CORS_ORIGIN=*
+          COOKIE_SECURE=false
+          WEB_CONCURRENCY=1
+          ENVEOF
+          mkdir -p /tmp/students-data
+          # start just the api and give it a few seconds to boot
+          docker compose up -d api
+          sleep 8
+          # hit the health endpoint -- if this 200s, gunicorn started correctly
+          curl -sf http://localhost:5000/api/health | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d['status'] == 'ok', f'unexpected: {d}'
+          print('Health check passed:', d)
+          "
+          docker compose down

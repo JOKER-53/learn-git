@@ -108,6 +108,37 @@ def remove_workspace(reg_no: str) -> None:
         pass
 
 
+def reap_idle_workspaces(last_seen_map: dict, idle_hours: float) -> list:
+    """Stop (never remove) any running workspace-<reg_no> container whose
+    student hasn't been active in `idle_hours`. Their repo data on the
+    bind-mounted host folder is completely untouched -- ensure_workspace()
+    just starts the container fresh again next time they log in.
+    last_seen_map: {reg_no: datetime or None}. Returns the list of
+    reg_nos whose container got stopped, for logging."""
+    from datetime import datetime as _dt
+
+    c_client = client()
+    now = _dt.utcnow()
+    stopped = []
+
+    for c in c_client.containers.list(filters={"status": "running"}):
+        if not c.name.startswith("workspace-"):
+            continue
+        reg_no = c.name[len("workspace-"):]
+        last_seen = last_seen_map.get(reg_no)
+        if last_seen is None:
+            continue  # never recorded -- leave it alone rather than guess
+        idle_for_hours = (now - last_seen).total_seconds() / 3600
+        if idle_for_hours > idle_hours:
+            try:
+                c.stop(timeout=5)
+                stopped.append(reg_no)
+            except Exception:
+                pass  # best-effort -- next sweep will retry
+
+    return stopped
+
+
 def restart_workspace(reg_no: str) -> None:
     """Restart this student's workspace container. Used on logout to kill
     any live terminal connection (ttyd) tied to their old session -- any
@@ -123,7 +154,77 @@ def restart_workspace(reg_no: str) -> None:
         pass
 
 
-def _find_git_server():
+def _container_stats(c) -> dict:
+    """One-shot memory + CPU snapshot for a running container. Docker's
+    stats(stream=False) call blocks briefly (~1s) to take two samples
+    internally, which is how CPU percent gets computed -- fine for an
+    admin dashboard refresh, not something to call in a hot path."""
+    try:
+        s = c.stats(stream=False)
+        mem_usage = s.get("memory_stats", {}).get("usage", 0)
+        mem_limit = s.get("memory_stats", {}).get("limit", 0)
+
+        cpu_stats = s.get("cpu_stats", {})
+        precpu_stats = s.get("precpu_stats", {})
+        cpu_delta = (
+            cpu_stats.get("cpu_usage", {}).get("total_usage", 0)
+            - precpu_stats.get("cpu_usage", {}).get("total_usage", 0)
+        )
+        system_delta = (
+            cpu_stats.get("system_cpu_usage", 0)
+            - precpu_stats.get("system_cpu_usage", 0)
+        )
+        online_cpus = cpu_stats.get("online_cpus") or len(
+            cpu_stats.get("cpu_usage", {}).get("percpu_usage") or [1]
+        )
+        cpu_percent = 0.0
+        if system_delta > 0 and cpu_delta > 0:
+            cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+
+        return {
+            "mem_used_mb": round(mem_usage / (1024 * 1024), 1),
+            "mem_limit_mb": round(mem_limit / (1024 * 1024), 1) if mem_limit else None,
+            "cpu_percent": round(cpu_percent, 1),
+        }
+    except Exception:
+        return {"mem_used_mb": None, "mem_limit_mb": None, "cpu_percent": None}
+
+
+def get_metrics() -> dict:
+    """Snapshot of every student workspace container's status/resources,
+    plus the core services (nginx/webapp/api/git-server), for the admin
+    metrics dashboard."""
+    c_client = client()
+
+    workspaces = []
+    for c in c_client.containers.list(all=True):
+        if not c.name.startswith("workspace-"):
+            continue
+        reg_no = c.name[len("workspace-"):]
+        entry = {"reg_no": reg_no, "status": c.status}
+        if c.status == "running":
+            entry.update(_container_stats(c))
+        workspaces.append(entry)
+
+    core_services = {}
+    for service in ["nginx", "webapp", "api", "git-server"]:
+        containers = c_client.containers.list(
+            all=True, filters={"label": f"com.docker.compose.service={service}"}
+        )
+        if not containers:
+            continue
+        c = containers[0]
+        health = None
+        try:
+            health = c.attrs.get("State", {}).get("Health", {}).get("Status")
+        except Exception:
+            pass
+        entry = {"status": c.status, "health": health}
+        if c.status == "running":
+            entry.update(_container_stats(c))
+        core_services[service] = entry
+
+    return {"workspaces": workspaces, "core_services": core_services}
     """Locate the git-server container by its compose service label rather
     than a hardcoded name, so this keeps working regardless of the compose
     project name. Returns None if not found (git-server not running)."""

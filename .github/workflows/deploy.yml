@@ -1,0 +1,51 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH into EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/learn-git
+
+            echo "=== Pulling latest code ==="
+            git pull origin main
+
+            echo "=== Building workspace image ==="
+            docker compose build workspace-image
+
+            echo "=== Rebuilding and restarting services ==="
+            docker compose build --no-cache api webapp
+            docker compose up -d --no-deps api webapp
+
+            echo "=== Waiting for api to be healthy ==="
+            for i in $(seq 1 12); do
+              STATUS=$(curl -sf http://localhost:8080/api/health 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "not_ready")
+              if [ "$STATUS" = "ok" ]; then
+                echo "API healthy after ${i} attempts"
+                break
+              fi
+              echo "Attempt $i: not ready yet..."
+              sleep 5
+            done
+
+            if [ "$STATUS" != "ok" ]; then
+              echo "ERROR: api did not become healthy in time"
+              docker compose logs api --tail 30
+              exit 1
+            fi
+
+            echo "=== Deploy complete ==="
+            echo "Dashboard: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080"

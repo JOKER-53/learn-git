@@ -12,6 +12,7 @@ import logging
 import os
 import sqlite3
 import subprocess
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -82,8 +83,25 @@ def get_db():
     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
     if "recovery_code_hash" not in existing_cols:
         conn.execute("ALTER TABLE users ADD COLUMN recovery_code_hash TEXT")
+    if "last_seen" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
     conn.commit()
     return conn
+
+
+def touch_last_seen(reg_no):
+    """Record that this student was just active -- used by the idle-
+    workspace reaper to decide which containers are safe to stop."""
+    try:
+        conn = get_db()
+        conn.execute(
+            "UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE reg_no = ?",
+            (reg_no,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Failed to update last_seen for %s: %s", reg_no, e)
 
 
 def generate_recovery_code():
@@ -447,6 +465,7 @@ def me():
 @login_required
 def list_tasks():
     user_id = session["reg_no"]
+    touch_last_seen(user_id)
     conn = get_db()
     done = {row[0] for row in conn.execute(
         "SELECT task_id FROM progress WHERE user_id = ?", (user_id,)
@@ -520,7 +539,47 @@ def admin_students():
     return jsonify(out)
 
 
-@app.route("/api/admin/students/<reg_no>", methods=["DELETE"])
+@app.route("/api/admin/metrics")
+@admin_required
+def admin_metrics():
+    conn = get_db()
+    total_students = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    active_15m = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE last_seen > datetime('now', '-15 minutes')"
+    ).fetchone()[0]
+    active_1h = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE last_seen > datetime('now', '-1 hour')"
+    ).fetchone()[0]
+    conn.close()
+
+    try:
+        container_metrics = workspace_manager.get_metrics()
+    except Exception as e:
+        log.error("Failed to gather container metrics: %s", e)
+        return jsonify({"error": "failed to gather container metrics"}), 500
+
+    workspaces = container_metrics["workspaces"]
+    running = [w for w in workspaces if w["status"] == "running"]
+    total_mem_used = sum(w.get("mem_used_mb") or 0 for w in running)
+    total_mem_cap = sum(w.get("mem_limit_mb") or 0 for w in running)
+
+    return jsonify({
+        "students": {
+            "total": total_students,
+            "active_last_15min": active_15m,
+            "active_last_hour": active_1h,
+        },
+        "workspaces": {
+            "running": len(running),
+            "stopped": len(workspaces) - len(running),
+            "total_ever_created": len(workspaces),
+            "total_mem_used_mb": round(total_mem_used, 1),
+            "total_mem_cap_mb": round(total_mem_cap, 1),
+            "detail": workspaces,
+        },
+        "core_services": container_metrics["core_services"],
+        "idle_workspace_hours": IDLE_WORKSPACE_HOURS,
+    })
 @admin_required
 def admin_delete_student(reg_no):
     if reg_no == session["reg_no"]:
@@ -583,6 +642,7 @@ def authorize_terminal():
     if "reg_no" not in session:
         return "", 401
     if session["reg_no"] == target_reg_no or session.get("is_admin"):
+        touch_last_seen(target_reg_no)
         return "", 200
     return "", 403
 
@@ -590,6 +650,45 @@ def authorize_terminal():
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.utcnow().isoformat()})
+
+
+# ---- Idle workspace reaper ----
+# Runs in the background of every gunicorn worker process. Harmless if
+# multiple workers each run it -- stopping an already-stopped container
+# is a no-op, so redundant sweeps just waste a little CPU, not correctness.
+IDLE_WORKSPACE_HOURS = float(os.environ.get("IDLE_WORKSPACE_HOURS", "24"))
+REAPER_INTERVAL_SECONDS = 3600  # sweep hourly
+
+
+def _idle_reaper_loop():
+    while True:
+        time.sleep(REAPER_INTERVAL_SECONDS)
+        try:
+            conn = get_db()
+            rows = conn.execute("SELECT reg_no, last_seen FROM users").fetchall()
+            conn.close()
+
+            last_seen_map = {}
+            for reg_no, last_seen in rows:
+                if not last_seen:
+                    last_seen_map[reg_no] = None
+                    continue
+                try:
+                    last_seen_map[reg_no] = datetime.strptime(last_seen, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    last_seen_map[reg_no] = None
+
+            stopped = workspace_manager.reap_idle_workspaces(last_seen_map, IDLE_WORKSPACE_HOURS)
+            if stopped:
+                log.info(
+                    "Idle-workspace reaper stopped %d container(s) (idle > %sh): %s",
+                    len(stopped), IDLE_WORKSPACE_HOURS, stopped
+                )
+        except Exception as e:
+            log.error("Idle-workspace reaper sweep failed: %s", e)
+
+
+threading.Thread(target=_idle_reaper_loop, daemon=True).start()
 
 
 if __name__ == "__main__":
