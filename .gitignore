@@ -7,6 +7,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+#service
+learn-git.service
+
 # Node (if ever added)
 node_modules/
 
@@ -30,3 +33,4 @@ Thumbs.db
 # Logs
 *.log
 students-data/
+

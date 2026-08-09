@@ -3,19 +3,16 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "8080:80"     # the ONLY externally published port in production
+      - "8080:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - webapp
       - api
-    networks:
-      default:
-        aliases: []
     mem_limit: 128m
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
-      interval: 15s
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
@@ -24,7 +21,6 @@ services:
     build:
       context: ./webapp
     restart: unless-stopped
-    # no published ports -- only reachable through nginx
     depends_on:
       - api
     mem_limit: 64m
@@ -40,7 +36,6 @@ services:
       context: .
       dockerfile: api/Dockerfile
     restart: unless-stopped
-    # no published ports -- only reachable through nginx
     environment:
       - DB_PATH=/dbdata/progress.db
       - SECRET_KEY=${SECRET_KEY:-dev-only-insecure-key-change-me}
@@ -50,23 +45,10 @@ services:
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
       - DOCKER_NETWORK=learn-git_net
       - WORKSPACE_IMAGE=learn-git-workspace:latest
-      # Absolute HOST path (not a path inside any container) to the
-      # students-data directory. Required because api talks to the HOST
-      # Docker daemon over the socket -- any bind-mount source it asks the
-      # daemon to use is resolved on the host, not inside api's own
-      # container. Set this in .env to an absolute path, e.g.
-      # STUDENTS_HOST_PATH=/home/you/learn-git/students-data
-      - STUDENTS_HOST_PATH=${STUDENTS_HOST_PATH}
-      # Idle-workspace reaper: any student's container untouched for this
-      # many hours gets stopped automatically to reclaim resources. Their
-      # repo data is untouched -- ensure_workspace() just starts a fresh
-      # container next time they log in.
       - IDLE_WORKSPACE_HOURS=${IDLE_WORKSPACE_HOURS:-24}
     volumes:
       - progress_data:/dbdata
-      - ${STUDENTS_HOST_PATH}:/data                # api gets the WHOLE tree (trusted, for validation across all students)
-      - /var/run/docker.sock:/var/run/docker.sock  # lets api launch per-student containers
-                                                     # SECURITY: see SECURITY.md before public deploy
+      - /var/run/docker.sock:/var/run/docker.sock
     mem_limit: 512m
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=3)"]
@@ -74,13 +56,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    # NOTE: no depends_on for workspace-image here -- it's a profiled,
-    # build-only service (see below), and api doesn't need it *running*,
-    # only built beforehand: `docker compose build workspace-image`.
 
-  # Not started by `docker compose up` -- exists only so `docker compose build`
-  # produces the learn-git-workspace image, which the api then launches per
-  # student (one container per reg_no) via workspace_manager.py.
   workspace-image:
     build:
       context: ./workspace
@@ -96,12 +72,12 @@ services:
              mkdir -p /repos &&
              git daemon --base-path=/repos --export-all --reuseaddr --verbose /repos"
     ports:
-      - "9418:9418"   # git:// protocol -- exposed intentionally for clone/push/pull tasks
+      - "9418:9418"
     volumes:
       - git_server_data:/repos
     mem_limit: 128m
     healthcheck:
-      test: ["CMD", "sh", "-c", "netstat -tln 2>/dev/null | grep -q :9418 || ss -tln 2>/dev/null | grep -q :9418"]
+      test: ["CMD", "sh", "-c", "ss -tln 2>/dev/null | grep -q :9418"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -112,5 +88,5 @@ networks:
     name: learn-git_net
 
 volumes:
-  progress_data:      # accounts + task completion DB -- survives docker compose down
-  git_server_data:     # bare repos for remote/push/pull tasks
+  progress_data:
+  git_server_data:
