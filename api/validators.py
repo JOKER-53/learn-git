@@ -1,4 +1,4 @@
-import workspace_manager
+import api.workspace_manager as workspace_manager
 
 def run_git(reg_no, *args):
     """Run git inside the student's running container via docker exec."""

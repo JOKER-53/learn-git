@@ -6,12 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /app
 COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY api/app.py api/workspace_manager.py ./
-COPY tasks /app/tasks
+COPY api/ /app/api
+COPY tasks/ /app/tasks
 
 EXPOSE 5000
-# gunicorn instead of Flask's dev server -- the dev server is single-threaded
-# and becomes a real bottleneck once more than a couple students are hitting
-# /api/tasks and /api/tasks/<id>/check at once. 4 workers x 2 threads gives
-# 8-way concurrency; bump WEB_CONCURRENCY via env if you deploy on a bigger box.
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --workers ${WEB_CONCURRENCY:-4} --threads 2 --timeout 60 app:app"]
+# Run uvicorn server for FastAPI
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 5000 --workers ${WEB_CONCURRENCY:-4}"]
