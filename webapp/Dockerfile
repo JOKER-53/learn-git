@@ -1,6 +1,11 @@
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
+
 FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/index.html
-COPY login.html /usr/share/nginx/html/login.html
-COPY admin.html /usr/share/nginx/html/admin.html
-COPY forgot-password.html /usr/share/nginx/html/forgot-password.html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
