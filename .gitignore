@@ -1,34 +1,26 @@
 # Secrets / local config
 .env
-.env.*
 *.bak
 
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-venv/
-env/
+*.pyc
+*.pyo
 
-# Generator Scripts (used for scaffolding/migration)
-generate_*.py
-fix_*.py
+#service
+learn-git.service
 
-# Webapp / Node.js
+# Node (if ever added)
 node_modules/
-dist/
-dist-ssr/
-.eslintcache
-*.tsbuildinfo
 
 # Databases
 *.db
 *.db-wal
 *.db-shm
 
-# Runtime data
-# Real student work and repos, created by workspace containers
+# Runtime data that must never be committed -- real student work and
+# repos, created by workspace containers via the STUDENTS_HOST_PATH
+# bind mount (see .env.example).
 students-data/
 
 # OS / editor cruft
@@ -40,6 +32,5 @@ Thumbs.db
 
 # Logs
 *.log
+students-data/
 
-# Services
-learn-git.service

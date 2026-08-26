@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>learn-git — sign in</title>
+<style>
+  :root { --bg:#0d1117; --panel:#11161d; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --green:#2ea043; --red:#f85149; --yellow:#e3b341; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 100%; max-width: 380px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 32px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h1 span { color: var(--green); }
+  p.sub { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; margin-top: 16px; }
+  input {
+    width: 100%; padding: 10px 12px; background: #0d1117; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--green); }
+  button {
+    width: 100%; margin-top: 22px; padding: 10px; background: var(--green); color: white;
+    border: none; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  button:disabled { background: var(--border); cursor: not-allowed; }
+  .toggle { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+  .toggle a { color: var(--green); text-decoration: none; cursor: pointer; }
+  .forgot { margin-top: 10px; font-size: 12.5px; text-align: center; }
+  .forgot a { color: var(--muted); text-decoration: none; cursor: pointer; }
+  .forgot a:hover { color: var(--text); }
+  .error { color: var(--red); font-size: 13px; margin-top: 12px; display: none; }
+
+  .recovery-box {
+    display: none; margin-top: 16px; padding: 14px; background: #1c1500;
+    border: 1px solid var(--yellow); border-radius: 8px;
+  }
+  .recovery-box .label { font-size: 11px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .recovery-box code {
+    display: block; font-size: 18px; letter-spacing: 0.05em; color: #fff;
+    background: #0d1117; padding: 10px; border-radius: 6px; text-align: center; margin-bottom: 8px;
+  }
+  .recovery-box p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
+  .recovery-box button { margin-top: 12px; background: var(--yellow); color: #1c1500; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>learn<span>-git</span></h1>
+  <p class="sub" id="mode-sub">Sign in with your registration number</p>
+
+  <form id="auth-form">
+    <label for="reg_no">Registration Number</label>
+    <input id="reg_no" name="reg_no" type="text" autocomplete="username" required placeholder="e.g. 21CS045">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required minlength="6">
+
+    <div class="error" id="error-box"></div>
+    <button type="submit" id="submit-btn">Sign in</button>
+  </form>
+
+  <div class="recovery-box" id="recovery-box">
+    <div class="label">Save your recovery code</div>
+    <code id="recovery-code"></code>
+    <p>This is the only time you'll see this. If you forget your password, you'll need this code (and your reg no) to set a new one — there's no email recovery.</p>
+    <button id="recovery-continue">I've saved it — continue</button>
+  </div>
+
+  <div class="toggle" id="toggle-row">
+    <span id="toggle-text">New here?</span>
+    <a id="toggle-link">Create an account</a>
+  </div>
+  <div class="forgot" id="forgot-row">
+    <a href="forgot-password.html">Forgot your password?</a>
+  </div>
+</div>
+
+<script>
+const API = "";
+let mode = "login"; // or "register"
+let pendingRedirect = null;
+
+const form = document.getElementById("auth-form");
+const submitBtn = document.getElementById("submit-btn");
+const errorBox = document.getElementById("error-box");
+const toggleLink = document.getElementById("toggle-link");
+const toggleText = document.getElementById("toggle-text");
+const modeSub = document.getElementById("mode-sub");
+const recoveryBox = document.getElementById("recovery-box");
+
+toggleLink.addEventListener("click", () => {
+  mode = mode === "login" ? "register" : "login";
+  submitBtn.innerText = mode === "login" ? "Sign in" : "Create account";
+  modeSub.innerText = mode === "login"
+    ? "Sign in with your registration number"
+    : "Register with your registration number";
+  toggleText.innerText = mode === "login" ? "New here?" : "Already have an account?";
+  toggleLink.innerText = mode === "login" ? "Create an account" : "Sign in";
+  errorBox.style.display = "none";
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errorBox.style.display = "none";
+  submitBtn.disabled = true;
+  submitBtn.innerText = "Please wait...";
+
+  const reg_no = document.getElementById("reg_no").value.trim();
+  const password = document.getElementById("password").value;
+
+  try {
+    const res = await fetch(`${API}/api/auth/${mode === "login" ? "login" : "register"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ reg_no, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errorBox.innerText = data.error || "Something went wrong";
+      errorBox.style.display = "block";
+      submitBtn.disabled = false;
+      submitBtn.innerText = mode === "login" ? "Sign in" : "Create account";
+      return;
+    }
+
+    pendingRedirect = data.is_admin ? "admin.html" : "index.html";
+
+    if (mode === "register" && data.recovery_code) {
+      form.style.display = "none";
+      document.getElementById("toggle-row").style.display = "none";
+      document.getElementById("forgot-row").style.display = "none";
+      document.getElementById("recovery-code").innerText = data.recovery_code;
+      recoveryBox.style.display = "block";
+      return;
+    }
+
+    window.location.href = pendingRedirect;
+  } catch (err) {
+    errorBox.innerText = "Could not reach the server.";
+    errorBox.style.display = "block";
+    submitBtn.disabled = false;
+    submitBtn.innerText = mode === "login" ? "Sign in" : "Create account";
+  }
+});
+
+document.getElementById("recovery-continue").addEventListener("click", () => {
+  window.location.href = pendingRedirect || "index.html";
+});
+</script>
+</body>
+</html>
