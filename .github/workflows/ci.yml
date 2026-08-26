@@ -62,10 +62,10 @@ jobs:
           ENVEOF
           mkdir -p /tmp/students-data
           # start just the api and give it a few seconds to boot
-          docker compose up -d api
+          docker compose up -d nginx
           sleep 8
           # hit the health endpoint -- if this 200s, gunicorn started correctly
-          curl -sf http://localhost:5000/api/health | python3 -c "
+          curl -sf http://localhost:8080/api/health | python3 -c "
           import json, sys
           d = json.load(sys.stdin)
           assert d['status'] == 'ok', f'unexpected: {d}'
