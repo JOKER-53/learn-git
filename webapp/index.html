@@ -34,10 +34,9 @@
   #who{font-size:13px;color:var(--muted);}
   #who a{color:var(--red);text-decoration:none;cursor:pointer;margin-left:10px;}
 
-  /* two-column layout — stretches to fill remaining height */
+  /* two-column layout — flex for splitter */
   .layout{
-    display:grid;
-    grid-template-columns:420px 1fr;
+    display:flex;
     flex:1;          /* take all remaining vertical space */
     min-height:0;    /* allow shrinking below content height */
     overflow:hidden;
@@ -45,10 +44,26 @@
 
   /* left: task list, scrolls independently */
   .tasks-panel{
+    flex: 0 0 63.6%; /* 70:40 ratio */
+    min-width: 250px;
     border-right:1px solid var(--border);
     overflow-y:auto;
     padding:14px 16px 32px;
   }
+  
+  /* splitter */
+  .splitter {
+    width: 6px;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .splitter:hover, .splitter.active {
+    background: var(--blue);
+  }
+
   .tasks-panel::-webkit-scrollbar{width:4px;}
   .tasks-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
@@ -109,6 +124,7 @@
 
   /* right: terminal fills ALL remaining height */
   .terminal-panel{
+    flex: 1;
     display:flex;flex-direction:column;
     min-height:0;   /* crucial */
     background:#000;
@@ -152,7 +168,8 @@
 </header>
 
 <div class="layout">
-  <div class="tasks-panel"><div id="tasks">Loading...</div></div>
+  <div class="tasks-panel" id="tasks-panel"><div id="tasks">Loading...</div></div>
+  <div class="splitter" id="splitter"></div>
 
   <div class="terminal-panel">
     <div class="terminal-header">
@@ -253,6 +270,33 @@ async function load(){
 function fmt(t){return(t||"").replace(/`([^`]+)`/g,"<code>$1</code>");}
 
 (async()=>{const me=await auth();if(me)load();})();
+
+// Splitter drag logic
+const splitter = document.getElementById('splitter');
+const tasksPanel = document.getElementById('tasks-panel');
+let isDragging = false;
+
+splitter.addEventListener('mousedown', function(e) {
+  isDragging = true;
+  splitter.classList.add('active');
+  document.body.style.cursor = 'col-resize';
+  // Prevent iframe from swallowing mouse events during drag
+  document.getElementById('terminal-iframe').style.pointerEvents = 'none';
+});
+
+document.addEventListener('mousemove', function(e) {
+  if (!isDragging) return;
+  tasksPanel.style.flex = '0 0 ' + e.clientX + 'px';
+});
+
+document.addEventListener('mouseup', function(e) {
+  if (isDragging) {
+    isDragging = false;
+    splitter.classList.remove('active');
+    document.body.style.cursor = '';
+    document.getElementById('terminal-iframe').style.pointerEvents = 'auto';
+  }
+});
 </script>
 </body>
 </html>

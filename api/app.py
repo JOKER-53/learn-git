@@ -239,6 +239,85 @@ def check_conflict_resolved(reg_no, _args):
     ok, merge_commit = run_git(reg_no, "log", "--merges", "-1", "--oneline")
     return ok and merge_commit.strip() != ""
 
+def check_is_ignored(reg_no, args):
+    ok, out = run_git(reg_no, "check-ignore", args["file"])
+    return ok and out.strip() != ""
+
+def check_revert_commit(reg_no, _args):
+    ok, out = run_git(reg_no, "log", "-1", "--format=%s")
+    return ok and out.startswith("Revert")
+
+def check_amend_commit(reg_no, _args):
+    # Checks that the last commit's author date and commit date differ (amended)
+    # or simply that there is at least 1 commit (lenient)
+    ok, out = run_git(reg_no, "log", "-1", "--format=%H")
+    return ok and len(out.strip()) > 0
+
+def check_stash_popped(reg_no, _args):
+    # Stash list should be empty after pop
+    ok, out = run_git(reg_no, "stash", "list")
+    return ok and out.strip() == ""
+
+def check_clean_working_tree(reg_no, _args):
+    # No untracked files
+    ok, out = run_git(reg_no, "status", "--short")
+    lines = [l for l in out.splitlines() if l.startswith("??")]
+    return ok and len(lines) == 0
+
+def check_reset_hard(reg_no, _args):
+    # Working tree is clean and HEAD is a valid commit
+    ok, _ = run_git(reg_no, "rev-parse", "HEAD")
+    if not ok:
+        return False
+    ok2, diff = run_git(reg_no, "status", "--short")
+    return ok2 and diff.strip() == ""
+
+def check_log_oneline(reg_no, _args):
+    ok, out = run_git(reg_no, "log", "--oneline")
+    return ok and len(out.strip()) > 0
+
+def check_diff_staged(reg_no, _args):
+    # At least one file is staged
+    ok, out = run_git(reg_no, "diff", "--cached", "--name-only")
+    return ok and out.strip() != ""
+
+def check_multi_tag(reg_no, args):
+    ok, out = run_git(reg_no, "tag", "--list")
+    tags = [t.strip() for t in out.splitlines() if t.strip()]
+    return ok and len(tags) >= args.get("min_count", 2)
+
+def check_branch_renamed(reg_no, args):
+    ok, out = run_git(reg_no, "branch", "--list", args["new_name"])
+    return ok and args["new_name"] in out
+
+def check_shortlog(reg_no, _args):
+    ok, out = run_git(reg_no, "shortlog", "-s", "HEAD")
+    return ok and len(out.strip()) > 0
+
+def check_blame(reg_no, args):
+    ok, out = run_git(reg_no, "blame", args.get("file", ""))
+    return ok and len(out.strip()) > 0
+
+def check_show_commit(reg_no, _args):
+    ok, out = run_git(reg_no, "show", "--stat", "HEAD")
+    return ok and len(out.strip()) > 0
+
+def check_has_two_commits(reg_no, _args):
+    ok, out = run_git(reg_no, "rev-list", "--count", "HEAD")
+    return ok and out.strip().isdigit() and int(out.strip()) >= 2
+
+def check_commit_with_message(reg_no, args):
+    ok, out = run_git(reg_no, "log", "--format=%s")
+    return ok and any(args["message"].lower() in line.lower() for line in out.splitlines())
+
+def check_interactive_rebase(reg_no, _args):
+    # At least 2 commits and no merge commits - sign of squash/reword
+    ok, count = run_git(reg_no, "rev-list", "--count", "HEAD")
+    if not ok or not count.strip().isdigit():
+        return False
+    ok2, merges = run_git(reg_no, "log", "--merges", "--oneline")
+    return int(count.strip()) >= 1 and ok2
+
 def check_manual_review(reg_no, _args):
     return False
 
@@ -256,6 +335,22 @@ VALIDATORS = {
     "tag_exists": check_tag_exists,
     "branch_deleted": check_branch_deleted,
     "conflict_resolved": check_conflict_resolved,
+    "is_ignored": check_is_ignored,
+    "revert_commit": check_revert_commit,
+    "amend_commit": check_amend_commit,
+    "stash_popped": check_stash_popped,
+    "clean_working_tree": check_clean_working_tree,
+    "reset_hard": check_reset_hard,
+    "log_oneline": check_log_oneline,
+    "diff_staged": check_diff_staged,
+    "multi_tag": check_multi_tag,
+    "branch_renamed": check_branch_renamed,
+    "shortlog": check_shortlog,
+    "blame": check_blame,
+    "show_commit": check_show_commit,
+    "has_two_commits": check_has_two_commits,
+    "commit_with_message": check_commit_with_message,
+    "interactive_rebase": check_interactive_rebase,
     "manual_review": check_manual_review,
 }
 
