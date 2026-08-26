@@ -5,302 +5,254 @@
 <title>learn-git</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #11161d;
-    --border: #30363d;
-    --text: #c9d1d9;
-    --muted: #8b949e;
-    --green: #2ea043;
-    --green-dim: #23863633;
-    --blue: #58a6ff;
-    --purple: #a371f7;
-    --orange: #f0883e;
-    --red: #f85149;
+    --bg:#0d1117;--panel:#11161d;--border:#30363d;--text:#c9d1d9;
+    --muted:#8b949e;--green:#2ea043;--green-dim:#23863633;
+    --blue:#58a6ff;--purple:#a371f7;--orange:#f0883e;--red:#f85149;--yellow:#e3b341;
   }
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    margin: 0;
-  }
-  header {
-    padding: 18px 32px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    background: rgba(13, 17, 23, 0.92);
-    backdrop-filter: blur(6px);
-    z-index: 10;
-  }
-  h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  h1 span { color: var(--green); }
-  .progress-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 220px;
-  }
-  .progress-track {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: 99px;
-    overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--green), #3fb950);
-    border-radius: 99px;
-    width: 0%;
-    transition: width 0.4s ease;
-  }
-  .progress-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
-
-  .layout {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 24px 32px 64px;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 32px;
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    background:var(--bg);color:var(--text);
+    display:flex;flex-direction:column;
   }
 
-  .tier-section { margin-bottom: 8px; }
-  .tier-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 28px 0 14px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
+  /* header */
+  header{
+    flex-shrink:0;
+    padding:12px 24px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;
+    background:rgba(13,17,23,.96);backdrop-filter:blur(6px);
   }
-  .tier-heading::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-  .tier-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .tier-beginner .tier-dot { background: var(--green); }
-  .tier-intermediate .tier-dot { background: var(--blue); }
-  .tier-advanced .tier-dot { background: var(--purple); }
-  .tier-expert .tier-dot { background: var(--orange); }
+  h1{font-size:17px;font-weight:600;}
+  h1 span{color:var(--green);}
+  .hr{display:flex;align-items:center;gap:20px;}
+  .pw{display:flex;align-items:center;gap:10px;min-width:180px;}
+  .pt{flex:1;height:7px;background:var(--border);border-radius:99px;overflow:hidden;}
+  .pf{height:100%;background:linear-gradient(90deg,var(--green),#3fb950);border-radius:99px;width:0%;transition:width .4s;}
+  .pl{font-size:12px;color:var(--muted);white-space:nowrap;}
+  #who{font-size:13px;color:var(--muted);}
+  #who a{color:var(--red);text-decoration:none;cursor:pointer;margin-left:10px;}
 
-  .task {
-    border: 1px solid var(--border);
-    background: var(--panel);
-    border-radius: 10px;
-    padding: 16px 18px;
-    margin-bottom: 10px;
-    opacity: 0.45;
-    filter: grayscale(0.4);
-    transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-  }
-  .task.unlocked { opacity: 1; filter: none; }
-  .task.unlocked:hover { transform: translateY(-1px); border-color: #444c56; }
-  .task.completed {
-    border-color: var(--green);
-    background: linear-gradient(180deg, var(--green-dim), transparent 60%), var(--panel);
-  }
-  .task.locked::before {
-    content: "🔒 ";
-    font-size: 12px;
-  }
-  .row { display: flex; align-items: center; justify-content: space-between; }
-  .tier-tag { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
-  .title { font-size: 15px; font-weight: 600; margin: 4px 0 6px; }
-  .desc { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
-  .desc code {
-    background: #1c2129;
-    border: 1px solid var(--border);
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 12.5px;
-    color: #e6edf3;
-  }
-  button {
-    background: var(--green);
-    color: white;
-    border: none;
-    padding: 7px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    margin-top: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    transition: background 0.15s ease;
-  }
-  button:hover:not(:disabled) { background: #2fb84f; }
-  button:disabled { background: var(--border); cursor: not-allowed; color: var(--muted); }
-  button.retry { background: var(--red); }
-  .badge {
-    font-size: 12px;
-    color: var(--green);
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  /* two-column layout — stretches to fill remaining height */
+  .layout{
+    display:grid;
+    grid-template-columns:420px 1fr;
+    flex:1;          /* take all remaining vertical space */
+    min-height:0;    /* allow shrinking below content height */
+    overflow:hidden;
   }
 
-  #terminal-panel {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    background: var(--panel);
+  /* left: task list, scrolls independently */
+  .tasks-panel{
+    border-right:1px solid var(--border);
+    overflow-y:auto;
+    padding:14px 16px 32px;
   }
-  #terminal-panel .term-header {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--muted);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  #terminal-panel .term-header a { color: var(--blue); text-decoration: none; }
-  #terminal-panel iframe {
-    width: 100%;
-    height: 420px;
-    border: none;
-    display: block;
-    background: #000;
-  }
+  .tasks-panel::-webkit-scrollbar{width:4px;}
+  .tasks-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
-  @media (min-width: 900px) {
-    .layout { grid-template-columns: 1.3fr 1fr; align-items: start; }
-    #terminal-panel { position: sticky; top: 84px; }
+  .tier-heading{
+    display:flex;align-items:center;gap:8px;
+    margin:20px 0 10px;font-size:11px;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  }
+  .tier-heading:first-child{margin-top:4px;}
+  .tier-heading::after{content:"";flex:1;height:1px;background:var(--border);}
+  .td{width:7px;height:7px;border-radius:50%;}
+  .tier-beginner .td{background:var(--green);}
+  .tier-intermediate .td{background:var(--blue);}
+  .tier-advanced .td{background:var(--purple);}
+  .tier-expert .td{background:var(--orange);}
+
+  .task{
+    border:1px solid var(--border);background:var(--panel);
+    border-radius:8px;padding:13px;margin-bottom:8px;
+    opacity:.42;filter:grayscale(.4);transition:all .2s;
+  }
+  .task.unlocked{opacity:1;filter:none;}
+  .task.unlocked:hover{border-color:#444c56;}
+  .task.completed{
+    border-color:var(--green);
+    background:linear-gradient(180deg,var(--green-dim),transparent 60%),var(--panel);
+  }
+  .th2{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;}
+  .tt{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;}
+  .badge{font-size:11px;color:var(--green);font-weight:600;}
+  .task-title{font-size:14px;font-weight:600;margin-bottom:6px;}
+  .task-desc{font-size:12.5px;color:var(--muted);line-height:1.55;}
+  .task-desc code,.task-hint code{
+    background:#1c2129;border:1px solid var(--border);
+    padding:1px 5px;border-radius:4px;font-size:11.5px;color:#e6edf3;
+  }
+  .task-hint{
+    display:none;margin-top:8px;padding:8px 10px;
+    background:#1a1500;border:1px solid #3d3000;
+    border-radius:6px;font-size:12px;color:var(--yellow);line-height:1.5;
+  }
+  .task-hint.open{display:block;}
+  .task-actions{display:flex;align-items:center;gap:8px;margin-top:10px;}
+  .btn-check{
+    background:var(--green);color:#fff;border:none;
+    padding:6px 14px;border-radius:6px;cursor:pointer;
+    font-size:12.5px;font-weight:600;transition:background .15s;
+  }
+  .btn-check:hover:not(:disabled){background:#2fb84f;}
+  .btn-check:disabled{background:var(--border);cursor:not-allowed;color:var(--muted);}
+  .btn-check.retry{background:var(--red);}
+  .btn-hint{
+    background:transparent;border:1px solid #3d3000;
+    color:var(--yellow);padding:5px 10px;border-radius:6px;
+    cursor:pointer;font-size:11.5px;
+  }
+  .btn-hint:hover{background:#1a1500;}
+
+  /* right: terminal fills ALL remaining height */
+  .terminal-panel{
+    display:flex;flex-direction:column;
+    min-height:0;   /* crucial */
+    background:#000;
+  }
+  .terminal-header{
+    flex-shrink:0;
+    padding:8px 14px;border-bottom:1px solid var(--border);
+    background:var(--panel);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .terminal-header span{font-size:12px;color:var(--muted);}
+  .terminal-header a{font-size:12px;color:var(--blue);text-decoration:none;}
+  .folder-banner{
+    flex-shrink:0;
+    padding:7px 14px;background:#140d00;border-bottom:1px solid #5a3a00;
+    font-size:12px;color:#c98a2e;line-height:1.5;
+  }
+  .folder-banner strong{color:var(--orange);}
+  .folder-banner code{
+    background:#1f1400;border:1px solid #5a3a00;
+    padding:1px 5px;border-radius:3px;color:var(--orange);font-size:11.5px;
+  }
+  /* iframe takes all leftover height */
+  #terminal-iframe{
+    flex:1;
+    border:none;display:block;width:100%;min-height:0;
+    background:#000;
   }
 </style>
 </head>
 <body>
 <header>
   <h1>learn<span>-git</span></h1>
-  <div class="progress-wrap">
-    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-    <span class="progress-label" id="progress-label">0 / 0</span>
+  <div class="hr">
+    <div class="pw">
+      <div class="pt"><div class="pf" id="pf"></div></div>
+      <span class="pl" id="pl">0 / 0</span>
+    </div>
+    <div id="who"></div>
   </div>
-  <div id="who" style="font-size:13px;color:var(--muted);margin-left:16px;white-space:nowrap;"></div>
 </header>
 
 <div class="layout">
-  <div>
-    <div id="tasks">Loading tasks...</div>
-  </div>
+  <div class="tasks-panel"><div id="tasks">Loading...</div></div>
 
-  <div id="terminal-panel">
-    <div class="term-header">
+  <div class="terminal-panel">
+    <div class="terminal-header">
       <span>your terminal</span>
-      <a id="terminal-fullscreen-link" href="#" target="_blank">open full screen ↗</a>
+      <a id="tlink" href="#" target="_blank">open full screen ↗</a>
     </div>
-    <iframe id="terminal-iframe" src="about:blank" title="workspace terminal"></iframe>
+    <div class="folder-banner">
+      ⚠ <strong>Always work inside <code>/data/repo</code></strong>
+      — the platform checks only that folder.
+      All remote tasks use the <strong>built-in git-server</strong> — no internet needed.
+    </div>
+    <iframe id="terminal-iframe" src="about:blank" title="terminal"></iframe>
   </div>
 </div>
 
 <script>
-const API = "";
-const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
+const API="";
+const TIERS=["beginner","intermediate","advanced","expert"];
 
-async function requireAuth() {
-  const res = await fetch(`${API}/api/auth/me`, { credentials: "include" });
-  if (!res.ok) {
-    window.location.href = "login.html";
-    return null;
-  }
-  const me = await res.json();
-  const whoEl = document.getElementById("who");
-  if (whoEl) {
-    whoEl.innerHTML = `${me.reg_no} <a id="logout" style="color:#f85149;cursor:pointer;text-decoration:none;margin-left:10px;">Sign out</a>`;
-    document.getElementById("logout").addEventListener("click", async () => {
-      await fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" });
-      window.location.href = "login.html";
-    });
-  }
-  if (me.terminal_path) {
-    document.getElementById("terminal-iframe").src = me.terminal_path;
-    document.getElementById("terminal-fullscreen-link").href = me.terminal_path;
+async function auth(){
+  const r=await fetch(`${API}/api/auth/me`,{credentials:"include"});
+  if(!r.ok){location.href="login.html";return null;}
+  const me=await r.json();
+  document.getElementById("who").innerHTML=
+    `${me.reg_no} <a id="lo">Sign out</a>`;
+  document.getElementById("lo").onclick=async()=>{
+    await fetch(`${API}/api/auth/logout`,{method:"POST",credentials:"include"});
+    location.href="login.html";
+  };
+  if(me.terminal_path){
+    document.getElementById("terminal-iframe").src=me.terminal_path;
+    document.getElementById("tlink").href=me.terminal_path;
   }
   return me;
 }
 
-async function loadTasks() {
-  const res = await fetch(`${API}/api/tasks`, { credentials: "include" });
-  if (res.status === 401) { window.location.href = "login.html"; return; }
-  const tasks = await res.json();
-  const container = document.getElementById("tasks");
-  container.innerHTML = "";
+async function load(){
+  const r=await fetch(`${API}/api/tasks`,{credentials:"include"});
+  if(r.status===401){location.href="login.html";return;}
+  const tasks=await r.json();
 
-  const completedCount = tasks.filter(t => t.completed).length;
-  document.getElementById("progress-fill").style.width =
-    tasks.length ? `${(completedCount / tasks.length) * 100}%` : "0%";
-  document.getElementById("progress-label").innerText = `${completedCount} / ${tasks.length}`;
+  const done=tasks.filter(t=>t.completed).length;
+  document.getElementById("pf").style.width=tasks.length?`${done/tasks.length*100}%`:"0%";
+  document.getElementById("pl").innerText=`${done} / ${tasks.length}`;
 
-  const byTier = {};
-  tasks.forEach(t => {
-    (byTier[t.tier] = byTier[t.tier] || []).push(t);
-  });
+  const by={};
+  tasks.forEach(t=>(by[t.tier]=by[t.tier]||[]).push(t));
+  const c=document.getElementById("tasks");
+  c.innerHTML="";
 
-  TIER_ORDER.forEach(tier => {
-    if (!byTier[tier]) return;
-    const section = document.createElement("div");
-    section.className = "tier-section";
-    section.innerHTML = `<div class="tier-heading tier-${tier}"><span class="tier-dot"></span>${tier}</div>`;
-
-    byTier[tier].forEach(t => {
-      const div = document.createElement("div");
-      div.className = "task"
-        + (t.unlocked ? " unlocked" : " locked")
-        + (t.completed ? " completed" : "");
-      div.innerHTML = `
-        <div class="row">
-          <span class="tier-tag">${t.tier}</span>
-          ${t.completed ? '<span class="badge">✓ complete</span>' : ""}
+  TIERS.forEach(tier=>{
+    if(!by[tier])return;
+    const s=document.createElement("div");
+    s.innerHTML=`<div class="tier-heading tier-${tier}"><span class="td"></span>${tier}</div>`;
+    by[tier].forEach(t=>{
+      const d=document.createElement("div");
+      d.className="task"+(t.unlocked?" unlocked":"")+(t.completed?" completed":"");
+      const h=t.hint&&t.hint.trim();
+      d.innerHTML=`
+        <div class="th2">
+          <span class="tt">${t.tier}</span>
+          ${t.completed?'<span class="badge">✓ complete</span>':""}
         </div>
-        <div class="title">${t.title}</div>
-        <div class="desc">${formatDesc(t.description)}</div>
-        ${t.unlocked && !t.completed ? `<button data-id="${t.id}">Check progress</button>` : ""}
+        <div class="task-title">${t.title}</div>
+        <div class="task-desc">${fmt(t.description)}</div>
+        ${h?`<div class="task-hint" id="h-${t.id}">${fmt(t.hint)}</div>`:""}
+        ${t.unlocked&&!t.completed?`
+          <div class="task-actions">
+            <button class="btn-check" data-id="${t.id}">Check progress</button>
+            ${h?`<button class="btn-hint" data-h="${t.id}">💡 Hint</button>`:""}
+          </div>`:""}
       `;
-      section.appendChild(div);
+      s.appendChild(d);
     });
-
-    container.appendChild(section);
+    c.appendChild(s);
   });
 
-  container.querySelectorAll("button").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      btn.classList.remove("retry");
-      btn.innerText = "Checking...";
-      const res = await fetch(`${API}/api/tasks/${btn.dataset.id}/check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
+  c.querySelectorAll(".btn-check").forEach(b=>{
+    b.onclick=async()=>{
+      b.disabled=true;b.classList.remove("retry");b.innerText="Checking...";
+      const r=await fetch(`${API}/api/tasks/${b.dataset.id}/check`,{
+        method:"POST",headers:{"Content-Type":"application/json"},credentials:"include"
       });
-      const data = await res.json();
-      if (data.passed) {
-        loadTasks();
-      } else {
-        btn.disabled = false;
-        btn.classList.add("retry");
-        btn.innerText = "Not yet — try again";
-      }
-    });
+      const d=await r.json();
+      if(d.passed)load();
+      else{b.disabled=false;b.classList.add("retry");b.innerText="Not yet — try again";}
+    };
+  });
+
+  c.querySelectorAll(".btn-hint").forEach(b=>{
+    b.onclick=()=>{
+      const el=document.getElementById(`h-${b.dataset.h}`);
+      if(el){el.classList.toggle("open");b.innerText=el.classList.contains("open")?"Hide":"💡 Hint";}
+    };
   });
 }
 
-function formatDesc(text) {
-  return text.replace(/`([^`]+)`/g, "<code>$1</code>");
-}
+function fmt(t){return(t||"").replace(/`([^`]+)`/g,"<code>$1</code>");}
 
-(async () => {
-  const me = await requireAuth();
-  if (me) loadTasks();
-})();
+(async()=>{const me=await auth();if(me)load();})();
 </script>
 </body>
 </html>
