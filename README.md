@@ -25,8 +25,8 @@ Students register, get an isolated terminal in the browser, and complete 30 real
 Browser
   │
   └─► nginx (port 8080)
-        ├─► /           → webapp  (static HTML/CSS/JS — task UI)
-        ├─► /api/       → api     (Flask — auth, tasks, validation)
+        ├─► /           → webapp  (React/Vite — task UI)
+        ├─► /api/       → api     (FastAPI — auth, tasks, validation)
         └─► /terminal/  → workspace-<reg_no>  (ttyd — per-student shell)
 
 Internal (no internet):
@@ -37,8 +37,8 @@ Internal (no internet):
 | Service | Image | Role |
 |---|---|---|
 | `nginx` | `nginx:alpine` | Reverse proxy, routes all traffic |
-| `webapp` | Custom (nginx+HTML) | Task list UI, login, admin dashboard |
-| `api` | Custom (Python/Flask) | Auth, task engine, workspace manager |
+| `webapp` | Custom (Node+Vite builder -> nginx) | Task list UI, login, admin dashboard |
+| `api` | Custom (Python/FastAPI/SQLAlchemy) | Auth, task engine, workspace manager |
 | `git-server` | `alpine` + git-daemon | Internal bare repos for remote tasks |
 | `workspace-<reg_no>` | Custom (alpine+ttyd+git) | One isolated container per student |
 
@@ -150,7 +150,8 @@ learn-git/
 │   └── forgot-password.html
 ├── api/
 │   ├── Dockerfile
-│   ├── app.py             # Flask app — all routes and validators
+│   ├── main.py            # FastAPI app
+│   ├── routes/            # API endpoints
 │   ├── workspace_manager.py  # Docker container lifecycle per student
 │   └── requirements.txt
 ├── workspace/
