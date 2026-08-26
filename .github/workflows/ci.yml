@@ -20,11 +20,11 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python deps
-        run: pip install flask flask-cors docker werkzeug gunicorn
+        run: pip install -r api/requirements.txt
 
       - name: Syntax-check Python files
         run: |
-          python3 -m py_compile api/app.py
+          python3 -m py_compile api/main.py api/routes/*.py
           python3 -m py_compile api/workspace_manager.py
           echo "Python syntax OK"
 
