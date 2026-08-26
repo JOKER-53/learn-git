@@ -28,7 +28,7 @@ services:
       - api
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/login.html"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/index.html"]
       interval: 15s
       timeout: 5s
       retries: 3

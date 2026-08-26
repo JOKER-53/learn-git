@@ -19,12 +19,12 @@ export default function Admin() {
       }
       const data = await r.json();
       setUsers(data);
+      setLoading(false);
       
       const mReq = await fetch('/api/admin/metrics', { credentials: 'include' });
       if (mReq.ok) {
         setMetrics(await mReq.json());
       }
-      setLoading(false);
     } catch (e) {
       console.error(e);
     }

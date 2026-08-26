@@ -69,3 +69,36 @@ def admin_reset_password(reg_no: str, req: AdminResetPasswordReq, admin_user: st
     user.recovery_code_hash = get_password_hash(new_recovery_code)
     db.commit()
     return {"ok": True, "reg_no": reg_no, "new_recovery_code": new_recovery_code}
+
+from datetime import datetime, timedelta
+
+@router.get("/metrics")
+def admin_metrics(admin_user: str = Depends(get_admin_user), db: Session = Depends(get_db)):
+    total_students = db.query(User).count()
+    time_15m = datetime.utcnow() - timedelta(minutes=15)
+    time_1h = datetime.utcnow() - timedelta(hours=1)
+    
+    active_15m = db.query(User).filter(User.last_seen > time_15m).count()
+    active_1h = db.query(User).filter(User.last_seen > time_1h).count()
+    
+    try:
+        cm = workspace_manager.get_metrics()
+    except Exception as e:
+        return {"error": "failed to gather metrics"}
+        
+    workspaces = cm.get("workspaces", [])
+    running = [w for w in workspaces if w.get("status") == "running"]
+    
+    return {
+        "students": {"total": total_students, "active_last_15min": active_15m, "active_last_hour": active_1h},
+        "workspaces": {
+            "running": len(running),
+            "stopped": len(workspaces) - len(running),
+            "total_ever_created": len(workspaces),
+            "total_mem_used_mb": round(sum(w.get("mem_used_mb") or 0 for w in running), 1),
+            "total_mem_cap_mb": round(sum(w.get("mem_limit_mb") or 0 for w in running), 1),
+            "detail": workspaces,
+        },
+        "core_services": cm.get("core_services", []),
+        "idle_workspace_hours": float(os.environ.get("IDLE_WORKSPACE_HOURS", "24")),
+    }
