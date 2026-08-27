@@ -250,11 +250,11 @@ function renderMetrics(m) {
       Combined terminal memory: ${m.workspaces.total_mem_used_mb} MB used / ${m.workspaces.total_mem_cap_mb} MB capped.
     </div>
     <table style="margin-bottom:20px;">
-      <thead><tr><th>Core service</th><th>Status</th><th>Health</th><th>Memory</th><th>CPU</th></tr></thead>
+      <thead><tr><th>Reg No</th><th>Progress</th><th>Completed Tasks</th><th>Last Active</th><th>Joined</th><th class="actions">Actions</th></tr></thead>
       <tbody>${coreRows || '<tr><td colspan="5">No data</td></tr>'}</tbody>
     </table>
     <table>
-      <thead><tr><th>Student terminal</th><th>Status</th><th>Memory</th><th>CPU</th></tr></thead>
+      <thead><tr><th>Reg No</th><th>Progress</th><th>Completed Tasks</th><th>Last Active</th><th>Joined</th><th class="actions">Actions</th></tr></thead>
       <tbody>${workspaceRows || '<tr><td colspan="4">No workspace containers yet</td></tr>'}</tbody>
     </table>
   `;
@@ -281,12 +281,13 @@ async function loadStudents() {
   rows.innerHTML = students.map(s => {
     const pct = s.total_tasks ? Math.round((s.completed_count / s.total_tasks) * 100) : 0;
     return `
-      <tr>
-        <td>${s.reg_no}${s.is_admin ? '<span class="admin-tag">ADMIN</span>' : ""}</td>
+      <tr class="student-row" data-regno="${s.reg_no.toLowerCase()}">
+        <td>${s.reg_no}${s.is_admin ? '<span class="admin-tag">ADMIN</span>' : ""}${s.last_seen && (new Date() - new Date(s.last_seen+"Z")) < 900000 ? '<span class="admin-tag" style="background:#0a0;color:#fff;">ONLINE</span>' : ""}</td>
         <td>
-          <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
+          <span class="bar-track" style="margin-bottom:5px;"><span class="bar-fill" style="width:${pct}%"></span></span>
           ${s.completed_count} / ${s.total_tasks}
         </td>
+        <td style="font-size: 12px; color: #aaa; max-width: 200px; word-wrap: break-word;">${s.completed_tasks ? s.completed_tasks.join(", ") : "—"}</td>
         <td>${s.last_activity ? new Date(s.last_activity + "Z").toLocaleString() : "—"}</td>
         <td>${new Date(s.created_at + "Z").toLocaleDateString()}</td>
         <td class="actions">
@@ -296,6 +297,14 @@ async function loadStudents() {
       </tr>
     `;
   }).join("");
+
+  
+  document.getElementById("search-input").addEventListener("input", (e) => {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll(".student-row").forEach(row => {
+      row.style.display = row.dataset.regno.includes(q) ? "" : "none";
+    });
+  });
 
   rows.querySelectorAll("[data-reset]").forEach(btn => {
     btn.addEventListener("click", () => openResetModal(btn.dataset.reset));

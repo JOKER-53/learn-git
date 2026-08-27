@@ -105,7 +105,7 @@ def main():
 
     print("\n" + "=" * 60)
     print("learn-git is starting up.")
-    print("Dashboard: http://localhost:8080")
+    print("Dashboard: http://localhost:80")
     print("=" * 60)
 
     if "--logs" in args:

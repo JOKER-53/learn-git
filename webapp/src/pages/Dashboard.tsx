@@ -60,6 +60,19 @@ export default function Dashboard() {
     auth();
   }, [navigate]);
 
+  const handleResetRepo = async () => {
+    if (!confirm("Are you sure you want to FACTORY RESET your git repository? All your commits and files will be permanently deleted and you will have to start over!")) return;
+    try {
+      const r = await fetch('/api/auth/reset-workspace', { method: 'POST', credentials: 'include' });
+      if (r.ok) {
+        alert("Repository reset successfully! The terminal will now restart.");
+        window.location.reload();
+      }
+    } catch (e) {
+      alert("Failed to reset repository.");
+    }
+  };
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     navigate('/login');
@@ -236,11 +249,19 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col min-h-0 bg-black">
           <div className="shrink-0 px-3.5 py-2 border-b border-border bg-panel flex justify-between items-center">
             <span className="text-xs text-muted">your terminal</span>
-            {user?.terminal_path && (
-              <a href={user.terminal_path} target="_blank" rel="noreferrer" className="text-xs text-blue no-underline">
-                open full screen ↗
-              </a>
-            )}
+            <div className="flex gap-4 items-center">
+              <button 
+                onClick={handleResetRepo}
+                className="text-xs text-red hover:underline cursor-pointer bg-transparent border-none p-0"
+              >
+                ⚠ Factory Reset Repo
+              </button>
+              {user?.terminal_path && (
+                <a href={user.terminal_path} target="_blank" rel="noreferrer" className="text-xs text-blue no-underline hover:underline">
+                  open full screen ↗
+                </a>
+              )}
+            </div>
           </div>
           <div className="shrink-0 px-3.5 py-[7px] bg-[#140d00] border-b border-[#5a3a00] text-xs text-[#c98a2e] leading-relaxed">
             ⚠ <strong className="text-orange">Always work inside </strong><code className="bg-[#1f1400] border border-[#5a3a00] px-1.5 py-[1px] rounded text-orange text-[11.5px]">/data/repo</code>

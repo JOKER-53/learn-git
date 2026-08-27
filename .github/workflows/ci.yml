@@ -20,13 +20,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python deps
-        run: pip install -r api/requirements.txt
+        run: |
+          pip install -r api/requirements.txt
+          pip install flake8 pytest httpx
 
-      - name: Syntax-check Python files
+      - name: Syntax-check and Lint Python files
         run: |
           python3 -m py_compile api/main.py api/routes/*.py
           python3 -m py_compile api/workspace_manager.py
-          echo "Python syntax OK"
+          flake8 --max-line-length 150 api/
+          echo "Python syntax and linting OK"
+
+      - name: Run Tests
+        run: pytest api/tests/
 
       - name: Validate tasks.json
         run: |
@@ -62,10 +68,10 @@ jobs:
           ENVEOF
           mkdir -p /tmp/students-data
           # start just the api and give it a few seconds to boot
-          docker compose up -d nginx
+          docker compose up -d caddy
           sleep 8
           # hit the health endpoint -- if this 200s, gunicorn started correctly
-          curl -sf http://localhost:8080/api/health | python3 -c "
+          curl -sf http://localhost:80/api/health | python3 -c "
           import json, sys
           d = json.load(sys.stdin)
           assert d['status'] == 'ok', f'unexpected: {d}'

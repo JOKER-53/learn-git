@@ -10,6 +10,7 @@ engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread"
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 class User(Base):
     __tablename__ = "users"
     reg_no = Column(String, primary_key=True, index=True)
@@ -19,13 +20,16 @@ class User(Base):
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 class Progress(Base):
     __tablename__ = "progress"
     user_id = Column(String, primary_key=True)
     task_id = Column(String, primary_key=True)
     completed_at = Column(DateTime, default=datetime.utcnow)
 
+
 Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = SessionLocal()

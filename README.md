@@ -9,11 +9,11 @@ Students register, get an isolated terminal in the browser, and complete 30 real
 ## ✨ Features
 
 - **30 structured tasks** across 4 difficulty tiers (Beginner → Expert)
-- **Isolated per-student terminals** — every student gets their own container with a private Git repo
+- **Isolated per-student terminals** — every student gets their own container with a private Git repo (with a 1-click 'Factory Reset Repo' for when they get stuck)
 - **Internet-blocked workspaces** — students can only interact with the built-in internal git-server; no external access
 - **Live task validation** — the platform runs `git` commands inside each container to check real repo state
 - **Progress persists** — data is stored in Docker named volumes; `docker compose down` never wipes student work
-- **Admin dashboard** — view all students' progress, reset passwords, monitor memory/CPU per container
+- **Admin dashboard** — Grafana-style UI to view all students' progress, stop idle terminals, reset passwords, and monitor live memory/CPU per container
 - **Resizable split-panel UI** — drag the divider between the task list and terminal to resize
 - **Idle reaper** — containers idle beyond a configurable threshold are automatically stopped (data preserved)
 
@@ -24,7 +24,7 @@ Students register, get an isolated terminal in the browser, and complete 30 real
 ```
 Browser
   │
-  └─► nginx (port 8080)
+  └─► caddy (ports 80/443)
         ├─► /           → webapp  (React/Vite — task UI)
         ├─► /api/       → api     (FastAPI — auth, tasks, validation)
         └─► /terminal/  → workspace-<reg_no>  (ttyd — per-student shell)
@@ -36,7 +36,7 @@ Internal (no internet):
 
 | Service | Image | Role |
 |---|---|---|
-| `nginx` | `nginx:alpine` | Reverse proxy, routes all traffic |
+| `caddy` | `caddy:alpine` | Reverse proxy, handles TLS and dynamic routing |
 | `webapp` | Custom (Node+Vite builder -> nginx) | Task list UI, login, admin dashboard |
 | `api` | Custom (Python/FastAPI/SQLAlchemy) | Auth, task engine, workspace manager |
 | `git-server` | `alpine` + git-daemon | Internal bare repos for remote tasks |
@@ -62,7 +62,7 @@ python3 server.py
 - Builds the workspace image
 - Starts the full stack
 
-Open **http://localhost:8080** when it's ready.
+Open **http://localhost** when it's ready.
 
 To stop:
 ```bash
@@ -140,14 +140,12 @@ learn-git/
 ├── server.py              # One-command local bootstrap
 ├── docker-compose.yml     # Full stack definition
 ├── .env.example           # Config template
-├── nginx/
-│   └── nginx.conf         # Routing rules (webapp / api / terminals)
+├── caddy/
+│   └── Caddyfile        # Routing rules (webapp / api / terminals)
 ├── webapp/
 │   ├── Dockerfile
-│   ├── index.html         # Main task UI (split-panel with resizable splitter)
-│   ├── admin.html         # Admin dashboard
-│   ├── login.html
-│   └── forgot-password.html
+│   ├── src/               # React SPA (Vite + Tailwind)
+│   └── pages/         # Dashboard, Admin, Login components
 ├── api/
 │   ├── Dockerfile
 │   ├── main.py            # FastAPI app

@@ -1,0 +1,36 @@
+{
+    # Global options
+}
+
+# The single entrypoint for the app
+:80 {
+    # Reverse proxy to api
+    handle /api/* {
+        reverse_proxy api:5000
+    }
+
+    # Reverse proxy to workspaces
+    @terminal path_regexp term ^/terminal/(?P<reguser>[A-Za-z0-9_-]+)/(?P<rest>.*)$
+    handle @terminal {
+        # forward_auth acts like auth_request in nginx
+        forward_auth api:5000 {
+            uri /api/internal/authorize-terminal
+            header_up X-Reg-No {re.term.reguser}
+            copy_headers X-Reg-No
+            header_up -Upgrade
+            header_up -Connection
+        }
+        
+        rewrite * /{re.term.rest}
+        reverse_proxy workspace-{re.term.reguser}:7681 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy to webapp for all other requests
+    handle {
+        reverse_proxy webapp:80
+    }
+}

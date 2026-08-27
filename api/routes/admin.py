@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -14,11 +15,13 @@ try:
     import json
     with open(TASKS_PATH) as f:
         TASKS = json.load(f)
-except:
+except Exception:
     TASKS = []
+
 
 class AdminResetPasswordReq(BaseModel):
     new_password: str
+
 
 @router.get("/users")
 def admin_students(admin_user: str = Depends(get_admin_user), db: Session = Depends(get_db)):
@@ -36,59 +39,60 @@ def admin_students(admin_user: str = Depends(get_admin_user), db: Session = Depe
         })
     return out
 
+
 @router.delete("/users/{reg_no}")
 def admin_delete_student(reg_no: str, request: Request, admin_user: str = Depends(get_admin_user), db: Session = Depends(get_db)):
     if reg_no == request.session.get("reg_no"):
         raise HTTPException(status_code=400, detail={"error": "you cannot delete your own account while signed in"})
-        
+
     user = db.query(User).filter(User.reg_no == reg_no).first()
     if not user:
         raise HTTPException(status_code=404, detail={"error": "no such student"})
-        
+
     db.delete(user)
     db.query(Progress).filter(Progress.user_id == reg_no).delete()
     db.commit()
-    
+
     try:
         workspace_manager.remove_workspace(reg_no)
     except Exception:
         pass
     return {"ok": True, "deleted": reg_no}
 
+
 @router.post("/users/{reg_no}/reset-password")
 def admin_reset_password(reg_no: str, req: AdminResetPasswordReq, admin_user: str = Depends(get_admin_user), db: Session = Depends(get_db)):
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail={"error": "password must be at least 6 characters"})
-        
+
     user = db.query(User).filter(User.reg_no == reg_no).first()
     if not user:
         raise HTTPException(status_code=404, detail={"error": "no such student"})
-        
+
     new_recovery_code = generate_recovery_code()
     user.password_hash = get_password_hash(req.new_password)
     user.recovery_code_hash = get_password_hash(new_recovery_code)
     db.commit()
     return {"ok": True, "reg_no": reg_no, "new_recovery_code": new_recovery_code}
 
-from datetime import datetime, timedelta
 
 @router.get("/metrics")
 def admin_metrics(admin_user: str = Depends(get_admin_user), db: Session = Depends(get_db)):
     total_students = db.query(User).count()
     time_15m = datetime.utcnow() - timedelta(minutes=15)
     time_1h = datetime.utcnow() - timedelta(hours=1)
-    
+
     active_15m = db.query(User).filter(User.last_seen > time_15m).count()
     active_1h = db.query(User).filter(User.last_seen > time_1h).count()
-    
+
     try:
         cm = workspace_manager.get_metrics()
-    except Exception as e:
+    except Exception:
         return {"error": "failed to gather metrics"}
-        
+
     workspaces = cm.get("workspaces", [])
     running = [w for w in workspaces if w.get("status") == "running"]
-    
+
     return {
         "students": {"total": total_students, "active_last_15min": active_15m, "active_last_hour": active_1h},
         "workspaces": {
@@ -102,3 +106,12 @@ def admin_metrics(admin_user: str = Depends(get_admin_user), db: Session = Depen
         "core_services": cm.get("core_services", []),
         "idle_workspace_hours": float(os.environ.get("IDLE_WORKSPACE_HOURS", "24")),
     }
+
+
+@router.post("/users/{reg_no}/stop-terminal")
+def admin_stop_terminal(reg_no: str, admin_user: str = Depends(get_admin_user)):
+    try:
+        workspace_manager.remove_workspace(reg_no)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})

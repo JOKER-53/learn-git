@@ -19,7 +19,7 @@ This covers deploying `learn-git` to your own server or an AWS EC2 instance, wit
    - `22` (SSH) — from your IP only
    - `80` (HTTP) — from anywhere
    - `443` (HTTPS) — from anywhere
-   - Do **not** expose `9418` (git clone/push/pull) publicly unless you specifically want unauthenticated git-over-git-protocol reachable from the internet — most setups should drop this. Everything else (dashboard, API, every student's terminal) only ever goes through the app's own `nginx` container, published on host port 8080, so no other app ports need opening.
+   - Do **not** expose `9418` (git clone/push/pull) publicly unless you specifically want unauthenticated git-over-git-protocol reachable from the internet — most setups should drop this. Everything else (dashboard, API, every student's terminal) only ever goes through the app's own `caddy` container, published on host ports 80/443, so no other app ports need opening.
 3. SSH in and install Docker:
    ```bash
    sudo apt update && sudo apt install -y docker.io docker-compose-plugin
@@ -31,7 +31,7 @@ This covers deploying `learn-git` to your own server or an AWS EC2 instance, wit
 
 ## 3. Build and deploy the app
 
-The app now ships its own `nginx` container that routes the dashboard, API, and every student's isolated terminal — you don't hand-write that config per deployment, it's `nginx/nginx.conf` in the repo.
+The app now ships its own `nginx` container that routes the dashboard, API, and every student's isolated terminal — you don't hand-write that config per deployment, it's `caddy/Caddyfile` in the repo.
 
 ```bash
 git clone <your-repo-url>
@@ -58,49 +58,20 @@ docker compose build workspace-image
 docker compose up -d --build
 ```
 
-Confirm it's running: `docker compose ps` — you should see `nginx`, `webapp`, `api`, and `git-server`. Individual `workspace-<reg_no>` containers appear as students log in.
+Confirm it's running: `docker compose ps` — you should see `caddy`, `webapp`, `api`, and `git-server`. Individual `workspace-<reg_no>` containers appear as students log in.
 
-Only `nginx` publishes a port (80). `webapp`, `api`, and every `workspace-*` container are reachable only through it — do not add `ports:` to those services in a public deployment.
+Only `caddy` publishes ports (80/443). `webapp`, `api`, and every `workspace-*` container are reachable only through it — do not add `ports:` to those services in a public deployment.
 
-## 4. Put HTTPS in front of the app's nginx
+## 4. Automatic HTTPS with Caddy
 
-The container's `nginx.conf` handles routing but listens on plain HTTP inside Docker, published to the host on port **8080**. For a public domain, terminate TLS with certbot on the **host**, in front of the container:
+The app ships with Caddy as its reverse proxy. Caddy can automatically provision and renew TLS certificates from Let's Encrypt for you.
 
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-```
+To enable HTTPS:
+1. Open `caddy/Caddyfile`.
+2. Change the `:80` at the top to your actual domain name, e.g., `your-domain.com`.
+3. Restart Caddy: `docker compose restart caddy`.
 
-Create `/etc/nginx/sites-available/learn-git` on the host, proxying straight through to the app's own nginx container:
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;   # the app's nginx container, published above
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 3600s;   # keep terminal websockets alive
-    }
-}
-```
-
-> If you'd rather skip the host-level nginx entirely, change the app's `nginx` service in `docker-compose.yml` to publish `443:443` directly and mount a cert into it — the host-proxy approach above is just simpler to get a certbot auto-renewal loop working with minimal container changes.
-
-Enable it and get a certificate:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/learn-git /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d your-domain.com
-```
-
-certbot will rewrite the host config to listen on 443 with your cert and auto-renew. The app's own dashboard/login/admin pages and per-student terminals all already use relative paths (`/api/...`, `/terminal/<reg_no>/...`), so nothing in the app itself needs to know your domain name.
-
+Caddy will automatically fetch the certificates and serve everything over HTTPS securely!
 ## 5. Verify
 
 - `https://your-domain.com` → login page
@@ -136,3 +107,21 @@ WEB_CONCURRENCY=8
 **When you'd actually want a load balancer:** only if you split this across *multiple hosts* (e.g. running out of RAM/CPU on one EC2 instance, or wanting redundancy). That's a bigger architectural change than this app currently supports out of the box — student containers, the SQLite DB, and the Docker socket access are all tied to a single host right now. If you get to the point of genuinely needing multi-host scaling (hundreds of concurrent students), that's worth a dedicated conversation rather than a quick config tweak — it touches session storage, the DB, and how student containers get scheduled across hosts.
 
 **Practical recommendation for a normal class size (up to a few dozen concurrent students):** one appropriately-sized EC2 instance, the uvicorn changes above, and you're fine without any load balancer.
+
+## 7. Scaling to Hundreds of Students
+
+If your application scales to hundreds of concurrent students, a single Docker daemon might struggle to handle spinning up and managing all the `workspace-image` containers concurrently.
+
+At this scale, you should consider transitioning from a single-host `docker-compose` setup to a container orchestration platform:
+*   **Docker Swarm:** A simpler step up, where multiple servers form a swarm and containers are distributed across them automatically.
+*   **Kubernetes (K8s):** A more robust (and complex) solution for very large deployments, handling auto-scaling, node failure, and advanced ingress rules.
+
+To migrate to K8s/Swarm, the dynamic container creation in `api/workspace_manager.py` (which currently uses the Docker socket) would need to be updated to talk to the Kubernetes API or Docker Swarm services API instead.
+
+## 8. Secret Management
+
+The application is configured to refuse running with a default or missing `SECRET_KEY` in production to enforce security. 
+For a production deployment, do not rely on plain-text `.env` files if possible. Consider using a robust secret manager to inject secrets into your container environment:
+*   **AWS Secrets Manager** or **AWS Systems Manager Parameter Store**
+*   **HashiCorp Vault**
+*   **GitHub Actions Secrets** (for CI/CD deployments)

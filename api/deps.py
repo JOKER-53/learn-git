@@ -1,12 +1,14 @@
 from fastapi import Depends, Request, HTTPException
 from sqlalchemy.orm import Session
-from .db import get_db, User
+from .db import get_db
+
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     reg_no = request.session.get("reg_no")
     if not reg_no:
         raise HTTPException(status_code=401, detail={"error": "not authenticated"})
     return reg_no
+
 
 def get_admin_user(request: Request, db: Session = Depends(get_db)):
     reg_no = request.session.get("reg_no")

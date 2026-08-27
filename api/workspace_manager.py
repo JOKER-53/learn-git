@@ -15,7 +15,6 @@ sessions even though the container itself is recreated each time.
 """
 import os
 import re
-import subprocess
 
 import docker
 from docker.errors import NotFound
@@ -194,7 +193,7 @@ def get_metrics() -> dict:
         workspaces.append(entry)
 
     core_services = {}
-    for service in ["nginx", "webapp", "api", "git-server"]:
+    for service in ["caddy", "webapp", "api", "git-server"]:
         containers = c_client.containers.list(all=True, filters={"label": f"com.docker.compose.service={service}"})
         if not containers:
             continue
@@ -234,3 +233,24 @@ def reap_idle_workspaces(last_seen_map: dict, idle_hours: float) -> list:
             except Exception:
                 pass
     return removed
+
+
+def reset_workspace_volume(reg_no: str) -> None:
+    """Wipe the /data/repo inside the student's named volume."""
+    c_client = client()
+    name = container_name(reg_no)
+    try:
+        container = c_client.containers.get(name)
+        if container.status == "running":
+            container.exec_run(["sh", "-c", "rm -rf /data/repo && mkdir -p /data/repo"])
+            return
+    except NotFound:
+        pass
+    
+    vol = volume_name(reg_no)
+    c_client.containers.run(
+        "alpine",
+        command=["sh", "-c", "rm -rf /data/repo && mkdir -p /data/repo"],
+        remove=True,
+        volumes={vol: {"bind": "/data", "mode": "rw"}},
+    )

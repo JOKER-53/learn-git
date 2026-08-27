@@ -1,4 +1,4 @@
-import os
+from .db import User
 import secrets
 import string
 import time
@@ -15,15 +15,19 @@ log = logging.getLogger("learn-git")
 def get_password_hash(password):
     return werkzeug_generate(password)
 
+
 def verify_password(plain_password, hashed_password):
     return werkzeug_check(hashed_password, plain_password)
+
 
 def generate_recovery_code():
     alphabet = string.ascii_uppercase + string.digits
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     return f"{raw[:4]}-{raw[4:]}"
 
+
 _rate_limit_hits = defaultdict(list)
+
 
 def check_rate_limit(request: Request, max_attempts: int, window_seconds: int):
     ip = request.headers.get("X-Real-IP", request.client.host) or "unknown"
@@ -36,7 +40,7 @@ def check_rate_limit(request: Request, max_attempts: int, window_seconds: int):
         raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {max(retry_after, 1)}s.")
     hits.append(now)
 
-from .db import User
+
 def touch_last_seen(db: Session, reg_no: str):
     user = db.query(User).filter(User.reg_no == reg_no).first()
     if user:

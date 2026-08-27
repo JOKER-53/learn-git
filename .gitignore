@@ -34,3 +34,8 @@ Thumbs.db
 *.log
 students-data/
 
+fix_*.py
+cookies.txt
+add_*.py
+update_*.py
+.env.ci
