@@ -256,7 +256,9 @@ export default function Admin() {
                 </td>
                 <td className="px-4 py-3 text-muted text-xs">{u.last_seen || 'Never'}</td>
                 <td className="px-4 py-3 space-x-3 text-xs font-semibold">
-                  <button onClick={() => handleStopTerminal(u.reg_no)} className="text-orange hover:text-white transition-colors">STOP TERMINAL</button>
+                  {metrics?.workspaces?.detail?.some((w: any) => w.reg_no === u.reg_no) && (
+                    <button onClick={() => handleStopTerminal(u.reg_no)} className="text-orange hover:text-white transition-colors">STOP TERMINAL</button>
+                  )}
                   <button onClick={() => setResetModal(u.reg_no)} className="text-blue hover:text-white transition-colors">RESET PASS</button>
                   <button onClick={() => handleDelete(u.reg_no)} className="text-red hover:text-white transition-colors">DELETE</button>
                 </td>

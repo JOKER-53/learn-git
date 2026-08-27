@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import os
 from ..db import get_db, User
+from ..deps import get_current_user
 from ..utils import generate_recovery_code, check_rate_limit, get_password_hash, verify_password
 import api.workspace_manager as workspace_manager
 
