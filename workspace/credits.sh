@@ -37,7 +37,7 @@ CREDITS=(
   ""
   "learn-git — an interactive Git training workstation"
   ""
-  "Built by KADHIR (KADHIRAVANEG)"
+  "Built by KADHIR (JOKER-53)"
   "B.E. Computer Science (Cybersecurity)"
   "Sri Shakthi Institute of Engineering and Technology"
   ""
